@@ -301,21 +301,10 @@
     <div class="app">
       <header>
         <p class="brand">Audio Recorder</p>
-        <p class="tagline">Mic + device audio · syncs to laptop · MP4</p>
+        <p class="tagline">Record on your phone · save an MP4</p>
       </header>
 
-      <section id="authCard" class="controls">
-        <p class="panel-title">Sign in</p>
-        <label>Email <input id="email" type="email" autocomplete="username" /></label>
-        <label>Password <input id="password" type="password" autocomplete="current-password" /></label>
-        <div class="actions">
-          <button id="signInBtn" class="primary" type="button">Sign in</button>
-          <button id="signUpBtn" class="secondary" type="button">Create account</button>
-        </div>
-        <p class="status" id="authStatus">Use the same account as the laptop app.</p>
-      </section>
-
-      <section id="recPanel" class="rec-panel hidden">
+      <section id="recPanel" class="rec-panel">
         <div id="recBadge" class="rec-badge hidden">
           <span class="dot"></span>
           <span id="timer">00:00</span>
@@ -323,7 +312,7 @@
         <p class="rec-idle" id="recIdle">Ready to record</p>
       </section>
 
-      <section id="recCard" class="controls hidden">
+      <section id="recCard" class="controls">
         <label>
           Microphone
           <select id="micSelect"></select>
@@ -331,7 +320,7 @@
 
         <div class="volume-panel">
           <p class="volume-title">Volume controls</p>
-          <p id="volumeHint" class="hint">Browser sharing cannot match the original app. For the same device audio, record in the Audio Recorder desktop app.</p>
+          <p id="volumeHint" class="hint">The file stays on this phone. Nothing is uploaded.</p>
           <div class="volume-row">
             <div class="volume-head">
               <span>Mic <strong id="micVolLabel">100%</strong></span>
@@ -344,7 +333,7 @@
           </div>
           <div class="volume-row">
             <div class="volume-head">
-              <span>Device audio (speakers / Spotify) <strong id="desktopVolLabel">100%</strong></span>
+              <span>Device audio <strong id="desktopVolLabel">100%</strong></span>
             </div>
             <div class="meter" aria-hidden="true">
               <div id="desktopMeterFill" class="meter-fill"></div>
@@ -359,41 +348,15 @@
           <button id="stopBtn" class="danger" type="button" disabled>Stop</button>
         </div>
         <p class="status" id="recStatus">Ready.</p>
-        <div id="lastPlay" class="hidden">
-          <p class="hint">Last recording</p>
-          <audio id="lastAudio" controls playsinline></audio>
-        </div>
-        <button id="signOutBtn" class="secondary" type="button">Sign out</button>
       </section>
 
-      <section id="listCard" class="controls hidden">
-        <p class="panel-title">Recent recordings</p>
+      <section id="listCard" class="controls">
+        <p class="panel-title">On this phone</p>
         <ul id="list" class="phone-list"></ul>
       </section>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.min.js"></script>
-    <script>
-      const SUPABASE_URL = "https://dlwvzzixxpekagjkkejy.supabase.co";
-      const SUPABASE_ANON =
-        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRsd3Z6eml4eHBla2FnamtrZWp5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTExMzE4NzQsImV4cCI6MjEwNjcwNzg3NH0.qdo8M4E5e6X90apMA4jenqCMXnwNTWQWHA9nu-ZohVg";
-      const DB_NAME = "audio-recorder-phone";
-      const STORE = "clips";
-
-      const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
-      const authCard = document.getElementById("authCard");
-      const recPanel = document.getElementById("recPanel");
-      const recCard = document.getElementById("recCard");
-      const listCard = document.getElementById("listCard");
-      const authStatus = document.getElementById("authStatus");
-      const recStatus = document.getElementById("recStatus");
-      const startBtn = document.getElementById("startBtn");
-      const stopBtn = document.getElementById("stopBtn");
-      const timerEl = document.getElementById("timer");
-      const recBadge = document.getElementById("recBadge");
-      const listEl = document.getElementById("list");
-      const lastPlay = document.getElementById("lastPlay");
-      const lastAudio = document.getElementById("lastAudio");
+    <script type="module">
       const micSelect = document.getElementById("micSelect");
       const micVolume = document.getElementById("micVolume");
       const desktopVolume = document.getElementById("desktopVolume");
@@ -404,13 +367,18 @@
       const desktopMeterFill = document.getElementById("desktopMeterFill");
       const desktopMeterPeak = document.getElementById("desktopMeterPeak");
       const volumeHint = document.getElementById("volumeHint");
+      const recPanel = document.getElementById("recPanel");
+      const recBadge = document.getElementById("recBadge");
+      const recStatus = document.getElementById("recStatus");
+      const startBtn = document.getElementById("startBtn");
+      const stopBtn = document.getElementById("stopBtn");
+      const timerEl = document.getElementById("timer");
+      const listEl = document.getElementById("list");
 
       let mediaRecorder = null;
       let chunks = [];
       let timer = null;
       let startedAt = 0;
-      let channel = null;
-      let objectUrls = new Map();
       let audioContext = null;
       let micVolumeGain = null;
       let desktopVolumeGain = null;
@@ -420,11 +388,12 @@
       let captureStreams = [];
       const micPeakState = { value: 0, hold: 0 };
       const desktopPeakState = { value: 0, hold: 0 };
+      const recordings = [];
       const canDisplayMedia = !!(navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia);
 
-      function setText(el, msg, kind) {
-        el.textContent = msg;
-        el.className = "status " + (kind || "");
+      function setText(msg, kind) {
+        recStatus.textContent = msg;
+        recStatus.className = "status " + (kind || "");
       }
 
       function fmt(ms) {
@@ -432,15 +401,20 @@
         return String(Math.floor(s / 60)).padStart(2, "0") + ":" + String(s % 60).padStart(2, "0");
       }
 
-      function pickMime() {
-        const types = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4"];
-        return types.find((t) => MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(t)) || "";
-      }
-
-      function extFor(mime) {
-        if (mime.includes("mp4")) return ".m4a";
-        if (mime.includes("ogg")) return ".ogg";
-        return ".webm";
+      function stamp() {
+        const d = new Date();
+        const p = (n) => String(n).padStart(2, "0");
+        return (
+          d.getFullYear() +
+          "-" +
+          p(d.getMonth() + 1) +
+          "-" +
+          p(d.getDate()) +
+          "-" +
+          p(d.getHours()) +
+          p(d.getMinutes()) +
+          p(d.getSeconds())
+        );
       }
 
       function sliderToGain(el) {
@@ -467,9 +441,8 @@
       desktopVolume.addEventListener("input", applyLiveVolumes);
       syncVolumeLabels();
       if (!canDisplayMedia) {
-        volumeHint.textContent =
-          "Device audio needs screen sharing (desktop Chrome/Edge). On a phone, only the mic is recorded.";
         desktopVolume.disabled = true;
+        volumeHint.textContent = "Phone mic only. The MP4 is saved on this phone.";
       }
 
       function getAnalyserLevel(analyser) {
@@ -516,47 +489,15 @@
         stopMeters();
         const tick = () => {
           setMeter(micMeterFill, micMeterPeak, getAnalyserLevel(micAnalyser), micPeakState);
-          setMeter(
-            desktopMeterFill,
-            desktopMeterPeak,
-            getAnalyserLevel(desktopAnalyser),
-            desktopPeakState
-          );
+          setMeter(desktopMeterFill, desktopMeterPeak, getAnalyserLevel(desktopAnalyser), desktopPeakState);
           meterRaf = requestAnimationFrame(tick);
         };
         meterRaf = requestAnimationFrame(tick);
       }
 
-      async function getSystemAudioStream() {
-        if (!canDisplayMedia) return null;
-        const displayStream = await navigator.mediaDevices.getDisplayMedia({
-          video: { frameRate: 5, width: 320, height: 180 },
-          audio: {
-            echoCancellation: false,
-            noiseSuppression: false,
-            autoGainControl: false,
-            channelCount: 2,
-            sampleRate: 48000,
-            suppressLocalAudioPlayback: false,
-          },
-        });
-        const audio = displayStream.getAudioTracks()[0];
-        if (!audio) {
-          displayStream.getTracks().forEach((t) => t.stop());
-          throw new Error("No device audio — tick “Share system audio” (not just a silent tab).");
-        }
-        try { audio.contentHint = "music"; } catch { /* ignore */ }
-        if (audio.applyConstraints) {
-          try {
-            await audio.applyConstraints({
-              echoCancellation: false,
-              noiseSuppression: false,
-              autoGainControl: false,
-              channelCount: 2,
-            });
-          } catch { /* ignore */ }
-        }
-        return displayStream;
+      function pickMime() {
+        const types = ["audio/mp4", "audio/webm;codecs=opus", "audio/webm"];
+        return types.find((t) => MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(t)) || "";
       }
 
       async function loadMics() {
@@ -564,7 +505,7 @@
           const temp = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
           temp.getTracks().forEach((t) => t.stop());
         } catch {
-          // permission may still allow enumerate later
+          // list whatever is already permitted
         }
         const devices = await navigator.mediaDevices.enumerateDevices();
         const mics = devices.filter((d) => d.kind === "audioinput");
@@ -583,72 +524,24 @@
         }
       }
 
-      function openDb() {
-        return new Promise((resolve, reject) => {
-          const req = indexedDB.open(DB_NAME, 1);
-          req.onupgradeneeded = () => {
-            const db = req.result;
-            if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE, { keyPath: "id" });
-          };
-          req.onsuccess = () => resolve(req.result);
-          req.onerror = () => reject(req.error);
+      async function getSystemAudioStream() {
+        const displayStream = await navigator.mediaDevices.getDisplayMedia({
+          video: true,
+          audio: true,
         });
-      }
-
-      async function saveClip(clip) {
-        const db = await openDb();
-        await new Promise((resolve, reject) => {
-          const tx = db.transaction(STORE, "readwrite");
-          tx.objectStore(STORE).put(clip);
-          tx.oncomplete = () => resolve();
-          tx.onerror = () => reject(tx.error);
-        });
-        db.close();
-      }
-
-      async function getClip(id) {
-        const db = await openDb();
-        const clip = await new Promise((resolve, reject) => {
-          const tx = db.transaction(STORE, "readonly");
-          const req = tx.objectStore(STORE).get(id);
-          req.onsuccess = () => resolve(req.result || null);
-          req.onerror = () => reject(req.error);
-        });
-        db.close();
-        return clip;
-      }
-
-      async function allClips() {
-        const db = await openDb();
-        const clips = await new Promise((resolve, reject) => {
-          const tx = db.transaction(STORE, "readonly");
-          const req = tx.objectStore(STORE).getAll();
-          req.onsuccess = () => resolve(req.result || []);
-          req.onerror = () => reject(req.error);
-        });
-        db.close();
-        return clips;
-      }
-
-      function blobUrlFor(id, blob) {
-        if (objectUrls.has(id)) URL.revokeObjectURL(objectUrls.get(id));
-        const url = URL.createObjectURL(blob);
-        objectUrls.set(id, url);
-        return url;
-      }
-
-      function showLastPlayer(blob) {
-        lastAudio.src = blobUrlFor("last", blob);
-        lastPlay.classList.remove("hidden");
+        for (const t of displayStream.getVideoTracks()) t.stop();
+        if (!displayStream.getAudioTracks().length) {
+          displayStream.getTracks().forEach((t) => t.stop());
+          throw new Error("No device audio was shared.");
+        }
+        return displayStream;
       }
 
       function cleanupCapture() {
         stopMeters();
         if (timer) clearInterval(timer);
         timer = null;
-        for (const stream of captureStreams) {
-          stream.getTracks().forEach((t) => t.stop());
-        }
+        for (const stream of captureStreams) stream.getTracks().forEach((t) => t.stop());
         captureStreams = [];
         if (audioContext) {
           audioContext.close().catch(() => {});
@@ -666,169 +559,78 @@
         micSelect.disabled = false;
       }
 
-      async function refreshAuth() {
-        const { data } = await supabase.auth.getSession();
-        const signedIn = !!data.session;
-        authCard.classList.toggle("hidden", signedIn);
-        recPanel.classList.toggle("hidden", !signedIn);
-        recCard.classList.toggle("hidden", !signedIn);
-        listCard.classList.toggle("hidden", !signedIn);
-        if (signedIn) {
-          await loadMics();
-          await loadList();
-          watchList();
-        } else if (channel) {
-          supabase.removeChannel(channel);
-          channel = null;
+      async function toMp4(blob) {
+        if ((blob.type || "").includes("mp4")) {
+          return new Blob([blob], { type: "audio/mp4" });
         }
+        const mediabunny = await import("https://cdn.jsdelivr.net/npm/mediabunny@1.61.1/+esm");
+        const aac = await import("https://cdn.jsdelivr.net/npm/@mediabunny/aac-encoder@1.61.1/+esm");
+        if (!(await mediabunny.canEncodeAudio("aac"))) aac.registerAacEncoder();
+        const input = new mediabunny.Input({
+          source: new mediabunny.BlobSource(blob),
+          formats: mediabunny.ALL_FORMATS,
+        });
+        const output = new mediabunny.Output({
+          format: new mediabunny.Mp4OutputFormat(),
+          target: new mediabunny.BufferTarget(),
+        });
+        const conversion = await mediabunny.Conversion.init({
+          input,
+          output,
+          audio: { codec: "aac" },
+        });
+        await conversion.execute();
+        return new Blob([output.target.buffer], { type: "audio/mp4" });
       }
 
-      async function playRecording(row) {
-        try {
-          const local = await getClip(row.id);
-          if (local && local.blob) {
-            const url = blobUrlFor(row.id, local.blob);
-            const audio = document.getElementById("audio-" + row.id);
-            if (audio) {
-              audio.src = url;
-              audio.classList.remove("hidden");
-              await audio.play();
-            }
-            return;
-          }
-          if (row.status === "synced" || !row.storage_path) {
-            throw new Error("This one is only on the laptop now.");
-          }
-          const { data, error } = await supabase.storage.from("recordings").download(row.storage_path);
-          if (error) throw error;
-          await saveClip({
-            id: row.id,
-            blob: data,
-            fileName: row.file_name,
-            createdAt: row.created_at,
-            contentType: row.content_type || data.type,
-          });
-          const url = blobUrlFor(row.id, data);
-          const audio = document.getElementById("audio-" + row.id);
-          if (audio) {
-            audio.src = url;
-            audio.classList.remove("hidden");
-            await audio.play();
-          }
-        } catch (err) {
-          setText(recStatus, err.message || String(err), "error");
-        }
-      }
-
-      async function loadList() {
-        const { data, error } = await supabase
-          .from("recordings")
-          .select("id,file_name,status,created_at,storage_path,content_type")
-          .order("created_at", { ascending: false })
-          .limit(12);
-        if (error) {
-          setText(recStatus, error.message, "error");
+      async function saveFile(blob, filename) {
+        const file = new File([blob], filename, { type: "audio/mp4" });
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+          await navigator.share({ files: [file], title: filename });
           return;
         }
-        const localClips = await allClips().catch(() => []);
-        const localById = new Map(localClips.map((c) => [c.id, c]));
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = filename;
+        a.click();
+      }
+
+      function renderList() {
         listEl.innerHTML = "";
-        const rows = data || [];
-        if (!rows.length) {
+        if (!recordings.length) {
           const li = document.createElement("li");
           li.className = "item";
           li.textContent = "No recordings yet.";
           listEl.appendChild(li);
           return;
         }
-        for (const row of rows) {
+        for (const item of recordings) {
           const li = document.createElement("li");
           li.className = "item";
-          const when = new Date(row.created_at).toLocaleString();
-          const state = row.status === "synced" ? "On laptop" : "Waiting for laptop";
-          const canPlayLocal = localById.has(row.id);
-          const canPlayCloud = row.status !== "synced" && !!row.storage_path;
           const meta = document.createElement("div");
           meta.className = "meta";
-          meta.innerHTML = "<strong>" + state + "</strong><span>" + when + "</span>";
-          li.appendChild(meta);
+          meta.innerHTML = "<strong>" + item.name + "</strong><span>" + item.when + "</span>";
           const audio = document.createElement("audio");
-          audio.id = "audio-" + row.id;
           audio.controls = true;
           audio.setAttribute("playsinline", "");
-          audio.className = "hidden";
-          li.appendChild(audio);
-          if (canPlayLocal || canPlayCloud) {
-            const btn = document.createElement("button");
-            btn.className = "secondary";
-            btn.type = "button";
-            btn.textContent = "Play";
-            btn.onclick = () => playRecording(row);
-            li.appendChild(btn);
-            if (canPlayLocal) {
-              const clip = localById.get(row.id);
-              audio.src = blobUrlFor(row.id, clip.blob);
-              audio.classList.remove("hidden");
-              btn.classList.add("hidden");
+          audio.src = item.url;
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.className = "secondary";
+          btn.textContent = "Save MP4";
+          btn.onclick = async () => {
+            try {
+              await saveFile(item.blob, item.name);
+              setText("Saved " + item.name, "ok");
+            } catch (err) {
+              if (err && err.name === "AbortError") return;
+              setText(err.message || String(err), "error");
             }
-          } else {
-            const note = document.createElement("span");
-            note.textContent = "Play on the laptop (Music → Audio Recorder).";
-            li.appendChild(note);
-          }
+          };
+          li.append(meta, audio, btn);
           listEl.appendChild(li);
         }
       }
-
-      function watchList() {
-        if (channel) supabase.removeChannel(channel);
-        channel = supabase
-          .channel("phone-recordings")
-          .on("postgres_changes", { event: "*", schema: "public", table: "recordings" }, () => {
-            loadList();
-          })
-          .subscribe();
-      }
-
-      document.getElementById("signInBtn").onclick = async () => {
-        setText(authStatus, "Signing in…");
-        const { error } = await supabase.auth.signInWithPassword({
-          email: document.getElementById("email").value.trim(),
-          password: document.getElementById("password").value,
-        });
-        if (error) setText(authStatus, error.message, "error");
-        else {
-          setText(authStatus, "Signed in.", "ok");
-          refreshAuth();
-        }
-      };
-
-      document.getElementById("signUpBtn").onclick = async () => {
-        setText(authStatus, "Creating account…");
-        const email = document.getElementById("email").value.trim();
-        const password = document.getElementById("password").value;
-        try {
-          const res = await fetch(SUPABASE_URL + "/functions/v1/signup", {
-            method: "POST",
-            headers: { "content-type": "application/json", apikey: SUPABASE_ANON },
-            body: JSON.stringify({ email, password }),
-          });
-          const payload = await res.json().catch(() => ({}));
-          if (!res.ok) throw new Error(payload.error || "Sign up failed");
-          const { error } = await supabase.auth.signInWithPassword({ email, password });
-          if (error) throw error;
-          setText(authStatus, "Account ready.", "ok");
-          refreshAuth();
-        } catch (err) {
-          setText(authStatus, err.message || String(err), "error");
-        }
-      };
-
-      document.getElementById("signOutBtn").onclick = async () => {
-        if (mediaRecorder) return;
-        await supabase.auth.signOut();
-        refreshAuth();
-      };
 
       stopBtn.onclick = () => {
         if (mediaRecorder && mediaRecorder.state !== "inactive") mediaRecorder.stop();
@@ -838,8 +640,7 @@
         if (mediaRecorder) return;
         try {
           startBtn.disabled = true;
-          setText(recStatus, "Starting…");
-
+          setText("Starting…");
           const micStream = await navigator.mediaDevices.getUserMedia({
             audio: {
               deviceId: micSelect.value ? { exact: micSelect.value } : undefined,
@@ -854,80 +655,66 @@
           let systemStream = null;
           if (canDisplayMedia && !desktopVolume.disabled) {
             try {
-              setText(recStatus, "Share a screen/tab and enable audio…");
+              setText("Share audio if you want device sound…");
               systemStream = await getSystemAudioStream();
-              if (systemStream) captureStreams.push(systemStream);
+              captureStreams.push(systemStream);
             } catch (err) {
               console.warn(err);
-              setText(recStatus, "No device audio — recording mic only.");
             }
           }
 
           audioContext = new AudioContext({ latencyHint: "playback" });
           await audioContext.resume();
           const dest = audioContext.createMediaStreamDestination();
-          dest.channelCount = 2;
-          dest.channelCountMode = "explicit";
-          dest.channelInterpretation = "discrete";
           const master = audioContext.createGain();
-          master.gain.value = 0.9;
-          const limiter = audioContext.createDynamicsCompressor();
-          limiter.threshold.value = -2;
-          limiter.knee.value = 0;
-          limiter.ratio.value = 12;
-          limiter.attack.value = 0.003;
-          limiter.release.value = 0.08;
-          master.connect(limiter);
-          limiter.connect(dest);
+          master.gain.value = 1;
+          master.connect(dest);
 
           const micSource = audioContext.createMediaStreamSource(micStream);
-          micSource.channelCount = 1;
-          micSource.channelCountMode = "explicit";
           micVolumeGain = audioContext.createGain();
           micVolumeGain.gain.value = sliderToGain(micVolume);
           micSource.connect(micVolumeGain);
           micAnalyser = audioContext.createAnalyser();
           micAnalyser.fftSize = 1024;
-          micAnalyser.smoothingTimeConstant = 0.5;
           micVolumeGain.connect(micAnalyser);
           micVolumeGain.connect(master);
 
           if (systemStream) {
             const deskSource = audioContext.createMediaStreamSource(systemStream);
-            deskSource.channelCount = 2;
-            deskSource.channelCountMode = "explicit";
-            deskSource.channelInterpretation = "discrete";
             desktopVolumeGain = audioContext.createGain();
-            desktopVolumeGain.channelCount = 2;
-            desktopVolumeGain.channelCountMode = "explicit";
-            desktopVolumeGain.channelInterpretation = "discrete";
             desktopVolumeGain.gain.value = sliderToGain(desktopVolume);
             deskSource.connect(desktopVolumeGain);
             desktopAnalyser = audioContext.createAnalyser();
             desktopAnalyser.fftSize = 1024;
-            desktopAnalyser.smoothingTimeConstant = 0.5;
             desktopVolumeGain.connect(desktopAnalyser);
             desktopVolumeGain.connect(master);
           }
 
           chunks = [];
           const mime = pickMime();
-          mediaRecorder = new MediaRecorder(dest.stream, {
-            mimeType: mime || undefined,
-            audioBitsPerSecond: 320000,
-          });
+          mediaRecorder = new MediaRecorder(dest.stream, mime ? { mimeType: mime, audioBitsPerSecond: 192000 } : undefined);
           mediaRecorder.ondataavailable = (e) => {
             if (e.data && e.data.size) chunks.push(e.data);
           };
           mediaRecorder.onstop = async () => {
-            const blob = new Blob(chunks, {
-              type: mediaRecorder?.mimeType || mime || "audio/webm",
-            });
+            const raw = new Blob(chunks, { type: mediaRecorder?.mimeType || mime || "audio/webm" });
             cleanupCapture();
-            showLastPlayer(blob);
-            await uploadBlob(blob);
+            if (!raw.size) {
+              setText("Recording was empty.", "error");
+              return;
+            }
+            setText("Making MP4…");
+            try {
+              const mp4 = await toMp4(raw);
+              const name = "recording-" + stamp() + ".mp4";
+              const url = URL.createObjectURL(mp4);
+              recordings.unshift({ name, blob: mp4, url, when: new Date().toLocaleString() });
+              renderList();
+              setText("MP4 ready. Tap Save MP4 to keep it on your phone.", "ok");
+            } catch (err) {
+              setText(err.message || String(err), "error");
+            }
           };
-
           mediaRecorder.start(1000);
           startedAt = Date.now();
           timerEl.textContent = "00:00";
@@ -939,72 +726,15 @@
           timer = setInterval(() => {
             timerEl.textContent = fmt(Date.now() - startedAt);
           }, 250);
-          setText(
-            recStatus,
-            systemStream
-              ? "Recording mic + device audio. Watch both meters."
-              : "Recording mic only.",
-            systemStream ? "ok" : ""
-          );
+          setText(systemStream ? "Recording mic + device audio." : "Recording.", "ok");
         } catch (err) {
           cleanupCapture();
-          setText(recStatus, err.message, "error");
+          setText(err.message, "error");
         }
       };
 
-      async function uploadBlob(blob) {
-        if (!blob || blob.size < 200) {
-          setText(recStatus, "Recording was too small.", "error");
-          return;
-        }
-        startBtn.disabled = true;
-        setText(recStatus, "Uploading…");
-        try {
-          const { data: userData, error: userErr } = await supabase.auth.getUser();
-          if (userErr || !userData.user) throw new Error("Not signed in");
-          const mime = blob.type || "audio/webm";
-          const id = crypto.randomUUID();
-          const fileName =
-            "phone-" + new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19) + extFor(mime);
-          const storagePath = userData.user.id + "/" + id + extFor(mime);
-          const { error: upErr } = await supabase.storage.from("recordings").upload(storagePath, blob, {
-            contentType: mime,
-            upsert: false,
-          });
-          if (upErr) throw upErr;
-          const { data: inserted, error: insErr } = await supabase
-            .from("recordings")
-            .insert({
-              user_id: userData.user.id,
-              storage_path: storagePath,
-              file_name: fileName,
-              byte_size: blob.size,
-              content_type: mime,
-              status: "uploaded",
-            })
-            .select("id")
-            .single();
-          if (insErr) {
-            await supabase.storage.from("recordings").remove([storagePath]);
-            throw insErr;
-          }
-          await saveClip({
-            id: inserted.id,
-            blob,
-            fileName,
-            createdAt: new Date().toISOString(),
-            contentType: mime,
-          });
-          setText(recStatus, "Uploaded. You can play it here; laptop will also save a copy.", "ok");
-          loadList();
-        } catch (err) {
-          setText(recStatus, err.message || String(err), "error");
-        } finally {
-          startBtn.disabled = false;
-        }
-      }
-
-      refreshAuth();
+      renderList();
+      loadMics().catch((err) => setText(err.message, "error"));
     </script>
   </body>
 </html>
