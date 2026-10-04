@@ -59,6 +59,35 @@
       .more-btn[aria-expanded="true"],
       .more-btn:hover { background: rgba(255, 255, 255, 0.06); color: var(--text); }
       .more-btn:disabled { opacity: 0.35; cursor: default; }
+      .lock-btn {
+        position: fixed;
+        top: 8px;
+        left: max(8px, calc(50% - 220px + 8px));
+        z-index: 90;
+        width: 44px;
+        height: 44px;
+        border: 0;
+        border-radius: 50%;
+        padding: 0;
+        display: grid;
+        place-items: center;
+        background: transparent;
+        color: var(--muted);
+        cursor: pointer;
+      }
+      .lock-btn svg { width: 22px; height: 22px; }
+      .lock-btn .icon-shut { display: none; }
+      .lock-btn:hover,
+      body.locked .lock-btn { background: rgba(255, 255, 255, 0.06); color: var(--text); }
+      body.locked .lock-btn .icon-open { display: none; }
+      body.locked .lock-btn .icon-shut { display: block; }
+      .page-shield {
+        position: fixed;
+        inset: 0;
+        z-index: 80;
+        background: rgba(6, 8, 12, 0.28);
+        touch-action: none;
+      }
       .mic-menu {
         position: absolute;
         top: 52px;
@@ -370,7 +399,17 @@
     </style>
   </head>
   <body>
-    <div class="app">
+    <button id="lockBtn" class="lock-btn" type="button" aria-pressed="false" aria-label="Lock">
+      <svg class="icon-open" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <rect x="5" y="11" width="14" height="10" rx="2"></rect>
+        <path d="M8 11V8a4 4 0 0 1 8 0"></path>
+      </svg>
+      <svg class="icon-shut" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <rect x="5" y="11" width="14" height="10" rx="2"></rect>
+        <path d="M8 11V7a4 4 0 0 1 8 0v4"></path>
+      </svg>
+    </button>
+    <div class="app" id="app">
       <button id="moreBtn" class="more-btn" type="button" aria-label="Microphone" aria-expanded="false" aria-controls="micMenu">
         <svg viewBox="0 0 24 24" aria-hidden="true">
           <circle cx="12" cy="5" r="1.8" fill="currentColor"></circle>
@@ -409,6 +448,8 @@
       </section>
     </div>
 
+    <div id="pageShield" class="page-shield hidden" aria-hidden="true"></div>
+
     <div id="deleteOverlay" class="confirm-overlay hidden">
       <div class="confirm-card" role="dialog" aria-modal="true" aria-labelledby="deleteTitle">
         <h2 id="deleteTitle">Delete this recording?</h2>
@@ -433,6 +474,9 @@
       const listEl = document.getElementById("list");
       const deleteOverlay = document.getElementById("deleteOverlay");
       const deleteSub = document.getElementById("deleteSub");
+      const lockBtn = document.getElementById("lockBtn");
+      const appEl = document.getElementById("app");
+      const pageShield = document.getElementById("pageShield");
 
       let mediaRecorder = null;
       let chunks = [];
@@ -746,6 +790,25 @@
         micMenu.classList.add("hidden");
         moreBtn.setAttribute("aria-expanded", "false");
       });
+
+      function setPageLock(on) {
+        document.body.classList.toggle("locked", on);
+        lockBtn.setAttribute("aria-pressed", on ? "true" : "false");
+        lockBtn.setAttribute("aria-label", on ? "Unlock" : "Lock");
+        pageShield.classList.toggle("hidden", !on);
+        appEl.inert = on;
+        deleteOverlay.inert = on;
+        if (on) {
+          micMenu.classList.add("hidden");
+          moreBtn.setAttribute("aria-expanded", "false");
+        }
+      }
+
+      lockBtn.addEventListener("click", () => {
+        setPageLock(!document.body.classList.contains("locked"));
+      });
+      pageShield.addEventListener("touchmove", (event) => event.preventDefault(), { passive: false });
+      pageShield.addEventListener("wheel", (event) => event.preventDefault(), { passive: false });
 
       micSelect.addEventListener("change", () => {
         if (mediaRecorder) return;
