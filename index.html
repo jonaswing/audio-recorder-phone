@@ -918,13 +918,6 @@
         };
       }
 
-      function clipLabel(item) {
-        const when = clipWhen(item);
-        const base = String(item.name || "").replace(/\.mp4$/i, "");
-        if (!base || /^recording-\d{4}-\d{2}-\d{2}-\d{6}$/.test(base)) return when;
-        return { title: base, sub: when.title + " · " + when.sub };
-      }
-
       function renderList() {
         listEl.innerHTML = "";
         if (!recordings.length) {
@@ -935,7 +928,7 @@
           return;
         }
         for (const item of recordings) {
-          const label = clipLabel(item);
+          const label = clipWhen(item);
           const li = document.createElement("li");
           li.className = "item";
           const head = document.createElement("div");
