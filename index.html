@@ -276,7 +276,7 @@
       let meterRaf = null;
       let monitorToken = 0;
       let waveProcessor = null;
-      const WAVE_SLOTS = 220;
+      const WAVE_SLOTS = 56;
       let waveSamples = new Array(WAVE_SLOTS).fill(0);
       let captureStreams = [];
       const recordings = [];
@@ -398,32 +398,16 @@
         waveCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
         waveCtx.clearRect(0, 0, width, height);
         const mid = height / 2;
-        waveCtx.beginPath();
-        waveCtx.moveTo(0, mid);
+        const slot = width / WAVE_SLOTS;
+        const gap = 3;
+        const barW = Math.max(2, slot - gap);
+        waveCtx.fillStyle = "#3ecf8e";
         for (let i = 0; i < WAVE_SLOTS; i++) {
-          const x = (i / (WAVE_SLOTS - 1)) * width;
-          waveCtx.lineTo(x, mid - waveSamples[i] * height * 0.46);
+          const amp = Math.min(1, Math.abs(waveSamples[i]));
+          const barH = Math.max(barW, amp * (height - 6));
+          const x = i * slot + (slot - barW) / 2;
+          waveCtx.fillRect(x, mid - barH / 2, barW, barH);
         }
-        waveCtx.lineTo(width, mid);
-        waveCtx.closePath();
-        waveCtx.fillStyle = "rgba(62, 207, 142, 0.85)";
-        waveCtx.fill();
-        waveCtx.beginPath();
-        for (let i = 0; i < WAVE_SLOTS; i++) {
-          const x = (i / (WAVE_SLOTS - 1)) * width;
-          const y = mid - waveSamples[i] * height * 0.46;
-          if (i === 0) waveCtx.moveTo(x, y);
-          else waveCtx.lineTo(x, y);
-        }
-        waveCtx.strokeStyle = "#7dffa8";
-        waveCtx.lineWidth = 2;
-        waveCtx.stroke();
-        waveCtx.beginPath();
-        waveCtx.moveTo(0, mid);
-        waveCtx.lineTo(width, mid);
-        waveCtx.strokeStyle = "rgba(232, 236, 244, 0.18)";
-        waveCtx.lineWidth = 1;
-        waveCtx.stroke();
         meterRaf = requestAnimationFrame(drawWave);
       }
 
