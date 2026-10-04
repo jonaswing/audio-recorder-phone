@@ -30,6 +30,7 @@
         color: var(--text);
       }
       .app {
+        position: relative;
         display: flex;
         flex-direction: column;
         gap: 18px;
@@ -37,6 +38,38 @@
         max-width: 440px;
         margin: 0 auto;
         min-height: 100%;
+      }
+      .more-btn {
+        position: absolute;
+        top: 8px;
+        right: 8px;
+        z-index: 3;
+        width: 44px;
+        height: 44px;
+        border: 0;
+        border-radius: 50%;
+        padding: 0;
+        display: grid;
+        place-items: center;
+        background: transparent;
+        color: var(--muted);
+        cursor: pointer;
+      }
+      .more-btn svg { width: 22px; height: 22px; }
+      .more-btn[aria-expanded="true"],
+      .more-btn:hover { background: rgba(255, 255, 255, 0.06); color: var(--text); }
+      .more-btn:disabled { opacity: 0.35; cursor: default; }
+      .mic-menu {
+        position: absolute;
+        top: 52px;
+        right: 12px;
+        z-index: 4;
+        width: min(280px, calc(100% - 24px));
+        padding: 12px;
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
       }
       .record-wrap {
         display: flex;
@@ -133,6 +166,7 @@
         background: linear-gradient(90deg, #2ecc71 0%, #2ecc71 62%, #f1c40f 82%, #e74c3c 100%);
         transition: width 0.05s linear;
       }
+      .record-wrap .level { align-self: stretch; margin-top: 4px; }
       .status {
         margin: 0;
         min-height: 1.3em;
@@ -192,6 +226,20 @@
   </head>
   <body>
     <div class="app">
+      <button id="moreBtn" class="more-btn" type="button" aria-label="Microphone" aria-expanded="false" aria-controls="micMenu">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <circle cx="12" cy="5" r="1.8" fill="currentColor"></circle>
+          <circle cx="12" cy="12" r="1.8" fill="currentColor"></circle>
+          <circle cx="12" cy="19" r="1.8" fill="currentColor"></circle>
+        </svg>
+      </button>
+      <div id="micMenu" class="mic-menu hidden">
+        <label>
+          Microphone
+          <select id="micSelect"></select>
+        </label>
+      </div>
+
       <div class="record-wrap">
         <p id="timer" class="record-time"></p>
         <button id="recordBtn" class="record-btn" type="button" aria-label="Start recording">
@@ -207,17 +255,10 @@
         </button>
         <p id="recordHint" class="record-hint">Tap to record</p>
         <p class="status" id="recStatus">Ready.</p>
-      </div>
-
-      <section id="recCard" class="controls">
-        <label>
-          Microphone
-          <select id="micSelect"></select>
-        </label>
         <div class="level" id="micMeter" role="meter" aria-label="Microphone level" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
           <div id="micMeterFill" class="level-fill"></div>
         </div>
-      </section>
+      </div>
 
       <section id="listCard" class="controls">
         <p class="panel-title">On this phone</p>
@@ -227,6 +268,8 @@
 
     <script type="module">
       const micSelect = document.getElementById("micSelect");
+      const moreBtn = document.getElementById("moreBtn");
+      const micMenu = document.getElementById("micMenu");
       const micMeter = document.getElementById("micMeter");
       const micMeterFill = document.getElementById("micMeterFill");
       const recStatus = document.getElementById("recStatus");
@@ -405,6 +448,17 @@
         startMeterLoop();
       }
 
+      moreBtn.addEventListener("click", (event) => {
+        event.stopPropagation();
+        const open = micMenu.classList.toggle("hidden") === false;
+        moreBtn.setAttribute("aria-expanded", open ? "true" : "false");
+      });
+      document.addEventListener("click", (event) => {
+        if (micMenu.contains(event.target) || event.target === moreBtn) return;
+        micMenu.classList.add("hidden");
+        moreBtn.setAttribute("aria-expanded", "false");
+      });
+
       micSelect.addEventListener("change", () => {
         if (mediaRecorder) return;
         startMonitor().catch((err) => setText(err.message, "error"));
@@ -447,6 +501,7 @@
         mediaRecorder = null;
         setRecordMode(false);
         micSelect.disabled = false;
+        moreBtn.disabled = false;
       }
 
       function setRecordMode(on) {
@@ -649,6 +704,9 @@
           timerEl.textContent = "00:00";
           setRecordMode(true);
           micSelect.disabled = true;
+          moreBtn.disabled = true;
+          micMenu.classList.add("hidden");
+          moreBtn.setAttribute("aria-expanded", "false");
           timer = setInterval(() => {
             timerEl.textContent = fmt(Date.now() - startedAt);
           }, 250);
