@@ -401,7 +401,7 @@
         const slot = width / WAVE_SLOTS;
         const gap = 3;
         const barW = Math.max(2, slot - gap);
-        waveCtx.fillStyle = "#3ecf8e";
+        waveCtx.fillStyle = recordBtn.classList.contains("recording") ? "#e35d6a" : "#8b93a7";
         for (let i = 0; i < WAVE_SLOTS; i++) {
           const amp = Math.min(1, Math.abs(waveSamples[i]));
           const barH = Math.max(barW, amp * (height - 6));
