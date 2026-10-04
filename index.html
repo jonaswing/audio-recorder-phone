@@ -676,7 +676,7 @@
             return;
           }
         }
-        setText("Saved.", "ok");
+        setText("Ready.");
       }
 
       nameForm.addEventListener("submit", (event) => {
@@ -1240,7 +1240,7 @@
               nameNote.textContent = "";
               nameSave.disabled = false;
               nameInput.focus();
-              setText("Name it, then tap Save.", "ok");
+              setText("Ready.");
             } catch (err) {
               naming = null;
               nameOverlay.classList.add("hidden");
