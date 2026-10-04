@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="theme-color" content="#0f1115" />
+    <title>Audio Recorder</title>
+    <link rel="manifest" href="manifest.json" />
+    <style>
+      :root {
+        --bg: #0f1115;
+        --panel: #171a21;
+        --border: #2a3140;
+        --text: #e8ecf4;
+        --muted: #9aa3b5;
+        --accent: #3d8bfd;
+        --danger: #e35d6a;
+        --ok: #3ecf8e;
+        --radius: 16px;
+      }
+      * { box-sizing: border-box; }
+      html, body {
+        margin: 0;
+        min-height: 100%;
+        background: radial-gradient(1000px 500px at 20% -10%, #1a2438 0%, var(--bg) 55%);
+        color: var(--text);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+      .app {
+        max-width: 440px;
+        margin: 0 auto;
+        padding: 28px 20px 40px;
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+      }
+      h1 { margin: 0; font-size: 1.6rem; }
+      .tag { color: var(--muted); margin: 6px 0 0; font-size: 0.92rem; }
+      .card {
+        background: color-mix(in srgb, var(--panel) 90%, transparent);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 16px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+      label { color: var(--muted); font-size: 0.82rem; display: flex; flex-direction: column; gap: 6px; }
+      input {
+        border: 1px solid var(--border);
+        background: #10131a;
+        color: var(--text);
+        border-radius: 10px;
+        padding: 12px;
+        font-size: 1rem;
+      }
+      button {
+        border: 0;
+        border-radius: 12px;
+        padding: 14px;
+        font-size: 1rem;
+        font-weight: 650;
+        color: white;
+        cursor: pointer;
+      }
+      button:disabled { opacity: 0.45; }
+      .primary { background: linear-gradient(180deg, #4b97ff, var(--accent)); }
+      .danger { background: linear-gradient(180deg, #ef7380, var(--danger)); }
+      .ghost { background: #1a2130; border: 1px solid var(--border); }
+      .status { min-height: 1.3em; color: var(--muted); font-size: 0.88rem; }
+      .status.ok { color: var(--ok); }
+      .status.error { color: #ff8f9a; }
+      .rec {
+        min-height: 120px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 2rem;
+        font-variant-numeric: tabular-nums;
+        font-weight: 650;
+      }
+      .rec.on { color: var(--danger); }
+      .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+      ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+      li {
+        display: flex;
+        justify-content: space-between;
+        gap: 8px;
+        font-size: 0.85rem;
+        color: var(--muted);
+      }
+      li strong { color: var(--text); font-weight: 600; }
+      .hidden { display: none !important; }
+    </style>
+  </head>
+  <body>
+    <div class="app">
+      <header>
+        <h1>Audio Recorder</h1>
+        <p class="tag">Phone recordings save to your laptop via the cloud mailbox.</p>
+      </header>
+
+      <section id="authCard" class="card">
+        <label>Email <input id="email" type="email" autocomplete="username" /></label>
+        <label>Password <input id="password" type="password" autocomplete="current-password" /></label>
+        <div class="row">
+          <button id="signInBtn" class="primary" type="button">Sign in</button>
+          <button id="signUpBtn" class="ghost" type="button">Create account</button>
+        </div>
+        <p class="status" id="authStatus">Use the same account as the laptop app.</p>
+      </section>
+
+      <section id="recCard" class="card hidden">
+        <div class="rec" id="timer">00:00</div>
+        <button id="recBtn" class="primary" type="button">Start recording</button>
+        <p class="status" id="recStatus">Ready.</p>
+        <button id="signOutBtn" class="ghost" type="button">Sign out</button>
+      </section>
+
+      <section id="listCard" class="card hidden">
+        <p class="tag">Recent uploads</p>
+        <ul id="list"></ul>
+      </section>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.min.js"></script>
+    <script>
+      const SUPABASE_URL = "https://dlwvzzixxpekagjkkejy.supabase.co";
+      const SUPABASE_ANON =
+        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRsd3Z6eml4eHBla2FnamtrZWp5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTExMzE4NzQsImV4cCI6MjEwNjcwNzg3NH0.qdo8M4E5e6X90apMA4jenqCMXnwNTWQWHA9nu-ZohVg";
+
+      const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
+      const authCard = document.getElementById("authCard");
+      const recCard = document.getElementById("recCard");
+      const listCard = document.getElementById("listCard");
+      const authStatus = document.getElementById("authStatus");
+      const recStatus = document.getElementById("recStatus");
+      const recBtn = document.getElementById("recBtn");
+      const timerEl = document.getElementById("timer");
+      const listEl = document.getElementById("list");
+
+      let mediaRecorder = null;
+      let chunks = [];
+      let timer = null;
+      let startedAt = 0;
+      let channel = null;
+
+      function setText(el, msg, kind) {
+        el.textContent = msg;
+        el.className = "status " + (kind || "");
+      }
+
+      function fmt(ms) {
+        const s = Math.floor(ms / 1000);
+        return String(Math.floor(s / 60)).padStart(2, "0") + ":" + String(s % 60).padStart(2, "0");
+      }
+
+      function pickMime() {
+        const types = [
+          "audio/mp4",
+          "audio/webm;codecs=opus",
+          "audio/webm",
+          "video/mp4",
+        ];
+        return types.find((t) => MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(t)) || "";
+      }
+
+      function extFor(mime) {
+        if (mime.includes("mp4")) return ".m4a";
+        if (mime.includes("ogg")) return ".ogg";
+        return ".webm";
+      }
+
+      async function refreshAuth() {
+        const { data } = await supabase.auth.getSession();
+        const signedIn = !!data.session;
+        authCard.classList.toggle("hidden", signedIn);
+        recCard.classList.toggle("hidden", !signedIn);
+        listCard.classList.toggle("hidden", !signedIn);
+        if (signedIn) {
+          await loadList();
+          watchList();
+        } else if (channel) {
+          supabase.removeChannel(channel);
+          channel = null;
+        }
+      }
+
+      async function loadList() {
+        const { data, error } = await supabase
+          .from("recordings")
+          .select("id,file_name,status,created_at")
+          .order("created_at", { ascending: false })
+          .limit(12);
+        if (error) {
+          setText(recStatus, error.message, "error");
+          return;
+        }
+        listEl.innerHTML = "";
+        for (const row of data || []) {
+          const li = document.createElement("li");
+          const when = new Date(row.created_at).toLocaleString();
+          const state = row.status === "synced" ? "On laptop" : "Waiting for laptop";
+          li.innerHTML = "<strong>" + state + "</strong><span>" + when + "</span>";
+          listEl.appendChild(li);
+        }
+        if (!data || !data.length) {
+          const li = document.createElement("li");
+          li.textContent = "No uploads yet.";
+          listEl.appendChild(li);
+        }
+      }
+
+      function watchList() {
+        if (channel) supabase.removeChannel(channel);
+        channel = supabase
+          .channel("phone-recordings")
+          .on("postgres_changes", { event: "*", schema: "public", table: "recordings" }, () => {
+            loadList();
+          })
+          .subscribe();
+      }
+
+      document.getElementById("signInBtn").onclick = async () => {
+        setText(authStatus, "Signing in…");
+        const { error } = await supabase.auth.signInWithPassword({
+          email: document.getElementById("email").value.trim(),
+          password: document.getElementById("password").value,
+        });
+        if (error) setText(authStatus, error.message, "error");
+        else {
+          setText(authStatus, "Signed in.", "ok");
+          refreshAuth();
+        }
+      };
+
+      document.getElementById("signUpBtn").onclick = async () => {
+        setText(authStatus, "Creating account…");
+        const email = document.getElementById("email").value.trim();
+        const password = document.getElementById("password").value;
+        try {
+          const res = await fetch(SUPABASE_URL + "/functions/v1/signup", {
+            method: "POST",
+            headers: {
+              "content-type": "application/json",
+              apikey: SUPABASE_ANON,
+            },
+            body: JSON.stringify({ email, password }),
+          });
+          const payload = await res.json().catch(() => ({}));
+          if (!res.ok) throw new Error(payload.error || "Sign up failed");
+          const { error } = await supabase.auth.signInWithPassword({ email, password });
+          if (error) throw error;
+          setText(authStatus, "Account ready.", "ok");
+          refreshAuth();
+        } catch (err) {
+          setText(authStatus, err.message || String(err), "error");
+        }
+      };
+
+      document.getElementById("signOutBtn").onclick = async () => {
+        if (mediaRecorder) return;
+        await supabase.auth.signOut();
+        refreshAuth();
+      };
+
+      recBtn.onclick = async () => {
+        if (mediaRecorder) {
+          mediaRecorder.stop();
+          return;
+        }
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+          chunks = [];
+          const mime = pickMime();
+          mediaRecorder = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
+          mediaRecorder.ondataavailable = (e) => {
+            if (e.data && e.data.size) chunks.push(e.data);
+          };
+          mediaRecorder.onstop = async () => {
+            stream.getTracks().forEach((t) => t.stop());
+            clearInterval(timer);
+            recBtn.textContent = "Start recording";
+            recBtn.className = "primary";
+            timerEl.classList.remove("on");
+            const blob = new Blob(chunks, { type: mediaRecorder.mimeType || mime || "audio/webm" });
+            mediaRecorder = null;
+            await uploadBlob(blob);
+          };
+          mediaRecorder.start(1000);
+          startedAt = Date.now();
+          timerEl.textContent = "00:00";
+          timerEl.classList.add("on");
+          recBtn.textContent = "Stop";
+          recBtn.className = "danger";
+          timer = setInterval(() => {
+            timerEl.textContent = fmt(Date.now() - startedAt);
+          }, 250);
+          setText(recStatus, "Recording…", "ok");
+        } catch (err) {
+          setText(recStatus, err.message, "error");
+        }
+      };
+
+      async function uploadBlob(blob) {
+        if (!blob || blob.size < 200) {
+          setText(recStatus, "Recording was too small.", "error");
+          return;
+        }
+        recBtn.disabled = true;
+        setText(recStatus, "Uploading…");
+        try {
+          const { data: userData, error: userErr } = await supabase.auth.getUser();
+          if (userErr || !userData.user) throw new Error("Not signed in");
+          const mime = blob.type || "audio/webm";
+          const id = crypto.randomUUID();
+          const fileName = "phone-" + new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19) + extFor(mime);
+          const storagePath = userData.user.id + "/" + id + extFor(mime);
+          const { error: upErr } = await supabase.storage.from("recordings").upload(storagePath, blob, {
+            contentType: mime,
+            upsert: false,
+          });
+          if (upErr) throw upErr;
+          const { error: insErr } = await supabase.from("recordings").insert({
+            user_id: userData.user.id,
+            storage_path: storagePath,
+            file_name: fileName,
+            byte_size: blob.size,
+            content_type: mime,
+            status: "uploaded",
+          });
+          if (insErr) {
+            await supabase.storage.from("recordings").remove([storagePath]);
+            throw insErr;
+          }
+          setText(recStatus, "Uploaded. Laptop will save it locally, then remove the cloud copy.", "ok");
+          loadList();
+        } catch (err) {
+          setText(recStatus, err.message || String(err), "error");
+        } finally {
+          recBtn.disabled = false;
+        }
+      }
+
+      refreshAuth();
+    </script>
+  </body>
+</html>
