@@ -273,9 +273,11 @@
       let audioContext = null;
       let monitorStream = null;
       let monitorContext = null;
-      let micAnalyser = null;
       let meterRaf = null;
       let monitorToken = 0;
+      let waveProcessor = null;
+      const WAVE_SLOTS = 220;
+      let waveSamples = new Array(WAVE_SLOTS).fill(0);
       let captureStreams = [];
       const recordings = [];
       const canDisplayMedia = !!(navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia);
@@ -396,31 +398,26 @@
         waveCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
         waveCtx.clearRect(0, 0, width, height);
         const mid = height / 2;
-        const samples = micAnalyser ? micAnalyser.fftSize : 0;
-        const data = samples ? new Uint8Array(samples) : null;
-        if (micAnalyser) micAnalyser.getByteTimeDomainData(data);
         waveCtx.beginPath();
         waveCtx.moveTo(0, mid);
-        const points = Math.max(2, Math.floor(width));
-        for (let x = 0; x < points; x++) {
-          let v = 0;
-          if (data) {
-            const i = Math.min(samples - 1, Math.floor((x / (points - 1)) * (samples - 1)));
-            v = (data[i] - 128) / 128;
-          }
-          waveCtx.lineTo(x, mid - v * height * 0.46);
+        for (let i = 0; i < WAVE_SLOTS; i++) {
+          const x = (i / (WAVE_SLOTS - 1)) * width;
+          waveCtx.lineTo(x, mid - waveSamples[i] * height * 0.46);
         }
-        for (let x = points - 1; x >= 0; x--) {
-          let v = 0;
-          if (data) {
-            const i = Math.min(samples - 1, Math.floor((x / (points - 1)) * (samples - 1)));
-            v = (data[i] - 128) / 128;
-          }
-          waveCtx.lineTo(x, mid + v * height * 0.46);
-        }
+        waveCtx.lineTo(width, mid);
         waveCtx.closePath();
-        waveCtx.fillStyle = "rgba(62, 207, 142, 0.9)";
+        waveCtx.fillStyle = "rgba(62, 207, 142, 0.85)";
         waveCtx.fill();
+        waveCtx.beginPath();
+        for (let i = 0; i < WAVE_SLOTS; i++) {
+          const x = (i / (WAVE_SLOTS - 1)) * width;
+          const y = mid - waveSamples[i] * height * 0.46;
+          if (i === 0) waveCtx.moveTo(x, y);
+          else waveCtx.lineTo(x, y);
+        }
+        waveCtx.strokeStyle = "#7dffa8";
+        waveCtx.lineWidth = 2;
+        waveCtx.stroke();
         waveCtx.beginPath();
         waveCtx.moveTo(0, mid);
         waveCtx.lineTo(width, mid);
@@ -435,8 +432,50 @@
         meterRaf = requestAnimationFrame(drawWave);
       }
 
+      function pushWave(value) {
+        waveSamples.copyWithin(0, 1);
+        waveSamples[WAVE_SLOTS - 1] = value;
+      }
+
+      function attachWave(context, source) {
+        if (waveProcessor) {
+          waveProcessor.onaudioprocess = null;
+          waveProcessor.disconnect();
+          waveProcessor = null;
+        }
+        waveSamples = new Array(WAVE_SLOTS).fill(0);
+        if (!context.createScriptProcessor) return;
+        const processor = context.createScriptProcessor(2048, 1, 1);
+        const silent = context.createGain();
+        silent.gain.value = 0;
+        source.connect(processor);
+        processor.connect(silent);
+        silent.connect(context.destination);
+        const hops = 4;
+        processor.onaudioprocess = (event) => {
+          const input = event.inputBuffer.getChannelData(0);
+          const hop = Math.floor(input.length / hops);
+          for (let h = 0; h < hops; h++) {
+            let peak = 0;
+            const start = h * hop;
+            const end = h === hops - 1 ? input.length : start + hop;
+            for (let i = start; i < end; i++) {
+              const sample = input[i];
+              if (Math.abs(sample) > Math.abs(peak)) peak = sample;
+            }
+            pushWave(peak);
+          }
+        };
+        waveProcessor = processor;
+      }
+
       async function startMonitor() {
         const token = ++monitorToken;
+        if (waveProcessor) {
+          waveProcessor.onaudioprocess = null;
+          waveProcessor.disconnect();
+          waveProcessor = null;
+        }
         if (monitorStream) {
           monitorStream.getTracks().forEach((t) => t.stop());
           monitorStream = null;
@@ -445,7 +484,6 @@
           monitorContext.close().catch(() => {});
           monitorContext = null;
         }
-        micAnalyser = null;
         const stream = await openMic();
         if (token !== monitorToken) {
           stream.getTracks().forEach((t) => t.stop());
@@ -455,10 +493,7 @@
         monitorContext = new AudioContext();
         await monitorContext.resume();
         const source = monitorContext.createMediaStreamSource(stream);
-        micAnalyser = monitorContext.createAnalyser();
-        micAnalyser.fftSize = 2048;
-        micAnalyser.smoothingTimeConstant = 0.15;
-        source.connect(micAnalyser);
+        attachWave(monitorContext, source);
         startWaveLoop();
       }
 
