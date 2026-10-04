@@ -435,20 +435,19 @@
         source.connect(processor);
         processor.connect(silent);
         silent.connect(context.destination);
-        const hops = 4;
+        let held = 0;
+        let ticks = 0;
         processor.onaudioprocess = (event) => {
           const input = event.inputBuffer.getChannelData(0);
-          const hop = Math.floor(input.length / hops);
-          for (let h = 0; h < hops; h++) {
-            let peak = 0;
-            const start = h * hop;
-            const end = h === hops - 1 ? input.length : start + hop;
-            for (let i = start; i < end; i++) {
-              const sample = input[i];
-              if (Math.abs(sample) > Math.abs(peak)) peak = sample;
-            }
-            pushWave(peak);
+          for (let i = 0; i < input.length; i++) {
+            const sample = input[i];
+            if (Math.abs(sample) > Math.abs(held)) held = sample;
           }
+          ticks += 1;
+          if (ticks < 6) return;
+          ticks = 0;
+          pushWave(held);
+          held = 0;
         };
         waveProcessor = processor;
       }
