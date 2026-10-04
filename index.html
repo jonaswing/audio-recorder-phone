@@ -700,12 +700,37 @@
         moreBtn.disabled = false;
       }
 
+      let wakeLock = null;
+
+      async function keepScreenOn(on) {
+        if (!("wakeLock" in navigator)) return;
+        if (!on) {
+          if (wakeLock) {
+            try { await wakeLock.release(); } catch { /* already released */ }
+            wakeLock = null;
+          }
+          return;
+        }
+        try {
+          wakeLock = await navigator.wakeLock.request("screen");
+        } catch {
+          wakeLock = null;
+        }
+      }
+
+      document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState === "visible" && recordBtn.classList.contains("recording")) {
+          keepScreenOn(true);
+        }
+      });
+
       function setRecordMode(on) {
         recordBtn.classList.toggle("recording", on);
         recordBtn.disabled = false;
         recordBtn.setAttribute("aria-label", on ? "Stop recording" : "Start recording");
         recordHint.textContent = on ? "Tap to stop" : "Tap to record";
         if (!on) timerEl.textContent = "";
+        keepScreenOn(on);
       }
 
       async function toMp4(blob) {
