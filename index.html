@@ -647,6 +647,34 @@
         throw new Error("This browser could not write an MP4.");
       }
 
+      function downloadGeneric(blob, filename) {
+        const url = URL.createObjectURL(new Blob([blob], { type: "application/octet-stream" }));
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = filename;
+        a.target = "_blank";
+        a.rel = "noopener";
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 60000);
+      }
+
+      function saveRecording(blob, filename) {
+        const file = new File([blob], filename, { type: "video/mp4" });
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+          setText("Choose where to save the MP4.", "ok");
+          navigator.share({ files: [file], title: filename }).catch((err) => {
+            if (err && err.name === "AbortError") return;
+            downloadGeneric(blob, filename);
+            setText("Downloading " + filename + "…", "ok");
+          });
+          return;
+        }
+        downloadGeneric(blob, filename);
+        setText("Downloading " + filename + "…", "ok");
+      }
+
       function renderList() {
         listEl.innerHTML = "";
         if (!recordings.length) {
@@ -666,12 +694,11 @@
           audio.controls = true;
           audio.setAttribute("playsinline", "");
           audio.src = item.url;
-          const save = document.createElement("a");
+          const save = document.createElement("button");
+          save.type = "button";
           save.className = "save";
-          save.href = item.url;
-          save.download = item.name;
-          save.textContent = "Save MP4";
-          save.addEventListener("click", () => setText("Saving " + item.name + "…", "ok"));
+          save.textContent = "Download MP4";
+          save.onclick = () => saveRecording(item.blob, item.name);
           li.append(meta, audio, save);
           listEl.appendChild(li);
         }
@@ -761,7 +788,7 @@
               const url = URL.createObjectURL(mp4);
               recordings.unshift({ name, blob: mp4, url, when: new Date().toLocaleString() });
               renderList();
-              setText("MP4 ready. Tap Save MP4 to keep it on your phone.", "ok");
+              setText("MP4 ready. Tap Download MP4 to keep it on your phone.", "ok");
             } catch (err) {
               setText(err.message || String(err), "error");
             }
