@@ -44,11 +44,6 @@
         font-weight: 650;
         letter-spacing: -0.02em;
       }
-      header .tagline {
-        margin: 6px 0 0;
-        color: var(--muted);
-        font-size: 0.9rem;
-      }
       .rec-panel {
         position: relative;
         display: flex;
@@ -64,12 +59,6 @@
         border-color: color-mix(in srgb, var(--danger) 55%, var(--border));
         background: linear-gradient(180deg, #1c1520 0%, var(--panel) 100%);
       }
-      .rec-idle {
-        margin: 0;
-        color: var(--muted);
-        font-size: 0.95rem;
-      }
-      .rec-panel.recording .rec-idle { display: none; }
       .rec-badge {
         display: flex;
         align-items: center;
@@ -81,7 +70,6 @@
         font-size: 1.15rem;
         font-weight: 600;
       }
-      .rec-badge.hidden { display: none; }
       .rec-badge .dot {
         width: 10px;
         height: 10px;
@@ -301,15 +289,13 @@
     <div class="app">
       <header>
         <p class="brand">Audio Recorder</p>
-        <p class="tagline">Record on your phone · save an MP4</p>
       </header>
 
-      <section id="recPanel" class="rec-panel">
-        <div id="recBadge" class="rec-badge hidden">
+      <section id="recPanel" class="rec-panel hidden">
+        <div id="recBadge" class="rec-badge">
           <span class="dot"></span>
           <span id="timer">00:00</span>
         </div>
-        <p class="rec-idle" id="recIdle">Ready to record</p>
       </section>
 
       <section id="recCard" class="controls">
@@ -368,7 +354,6 @@
       const desktopMeterPeak = document.getElementById("desktopMeterPeak");
       const volumeHint = document.getElementById("volumeHint");
       const recPanel = document.getElementById("recPanel");
-      const recBadge = document.getElementById("recBadge");
       const recStatus = document.getElementById("recStatus");
       const startBtn = document.getElementById("startBtn");
       const stopBtn = document.getElementById("stopBtn");
@@ -612,7 +597,7 @@
         desktopAnalyser = null;
         mediaRecorder = null;
         recPanel.classList.remove("recording");
-        recBadge.classList.add("hidden");
+        recPanel.classList.add("hidden");
         startBtn.disabled = false;
         stopBtn.disabled = true;
         micSelect.disabled = false;
@@ -797,7 +782,7 @@
           else mediaRecorder.start(1000);
           startedAt = Date.now();
           timerEl.textContent = "00:00";
-          recBadge.classList.remove("hidden");
+          recPanel.classList.remove("hidden");
           recPanel.classList.add("recording");
           stopBtn.disabled = false;
           micSelect.disabled = true;
