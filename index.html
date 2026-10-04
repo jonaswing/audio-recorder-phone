@@ -444,7 +444,7 @@
       syncVolumeLabels();
       if (isPhone) {
         document.getElementById("deviceRow").classList.add("hidden");
-        volumeHint.textContent = "On a phone this records the microphone and saves an MP4 here. A phone browser cannot capture other apps.";
+        volumeHint.textContent = "Records the phone mic in full quality. A Bluetooth headset records in call quality — use the built-in mic.";
       } else if (!canDisplayMedia) {
         desktopVolume.disabled = true;
         volumeHint.textContent = "This browser cannot capture stereo device audio. Use desktop Chrome or Edge.";
@@ -529,6 +529,49 @@
           opt.textContent = "Default microphone";
           micSelect.appendChild(opt);
         }
+        const builtIn = mics.find((m) =>
+          /built-?in|iphone|ipad|pixel|samsung|internal|microphone array|speakerphone/i.test(m.label || "") &&
+          !/bluetooth|airpods|headset|hands-?free/i.test(m.label || "")
+        );
+        if (builtIn) micSelect.value = builtIn.deviceId;
+      }
+
+      function isCallMic(label) {
+        return /bluetooth|airpods|headset|hands-?free|communications/i.test(label || "");
+      }
+
+      async function openMic() {
+        const deviceId = micSelect.value ? { exact: micSelect.value } : undefined;
+        const attempts = [
+          {
+            deviceId,
+            echoCancellation: { exact: false },
+            noiseSuppression: { exact: false },
+            autoGainControl: { exact: false },
+            voiceIsolation: { exact: false },
+            channelCount: { ideal: 1 },
+            sampleRate: { ideal: 48000 },
+            sampleSize: { ideal: 16 },
+          },
+          {
+            deviceId,
+            echoCancellation: false,
+            noiseSuppression: false,
+            autoGainControl: false,
+            channelCount: { ideal: 1 },
+            sampleRate: { ideal: 48000 },
+          },
+        ];
+        let lastErr = null;
+        for (const audio of attempts) {
+          try {
+            return await navigator.mediaDevices.getUserMedia({ audio, video: false });
+          } catch (err) {
+            lastErr = err;
+            if (err.name !== "OverconstrainedError" && err.name !== "ConstraintError") throw err;
+          }
+        }
+        throw lastErr || new Error("Could not open the microphone");
       }
 
       async function getSystemAudioStream() {
@@ -670,15 +713,13 @@
         try {
           startBtn.disabled = true;
           setText("Starting…");
-          const micStream = await navigator.mediaDevices.getUserMedia({
-            audio: {
-              deviceId: micSelect.value ? { exact: micSelect.value } : undefined,
-              echoCancellation: false,
-              noiseSuppression: false,
-              autoGainControl: false,
-            },
-            video: false,
-          });
+          const label = micSelect.selectedOptions[0]?.textContent || "";
+          if (isPhone && isCallMic(label)) {
+            setText("That mic is a Bluetooth headset, so it records in phone-call quality. Pick the built-in mic.", "error");
+            startBtn.disabled = false;
+            return;
+          }
+          const micStream = await openMic();
           captureStreams.push(micStream);
 
           let systemStream = null;
@@ -733,7 +774,7 @@
           const recorderOptions = {};
           if (mime) recorderOptions.mimeType = mime;
           if (!isPhone) recorderOptions.audioBitsPerSecond = 512000;
-          else if (mime.includes("mp4")) recorderOptions.audioBitsPerSecond = 192000;
+          else if (mime.includes("mp4")) recorderOptions.audioBitsPerSecond = 256000;
           mediaRecorder = new MediaRecorder(recordStream, Object.keys(recorderOptions).length ? recorderOptions : undefined);
           mediaRecorder.ondataavailable = (e) => {
             if (e.data && e.data.size) chunks.push(e.data);
