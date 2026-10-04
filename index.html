@@ -268,7 +268,7 @@
     <div class="app">
       <header>
         <p class="brand">Audio Recorder</p>
-        <p class="tagline">Phone mic · syncs to laptop · MP4</p>
+        <p class="tagline">Mic + device audio · syncs to laptop · MP4</p>
       </header>
 
       <section id="authCard" class="controls">
@@ -298,7 +298,7 @@
 
         <div class="volume-panel">
           <p class="volume-title">Volume controls</p>
-          <p class="hint">Adjust mic level before/during recording. Meter moves while you talk.</p>
+          <p id="volumeHint" class="hint">Mic + device audio (speakers / Spotify). Share a screen/tab with audio when prompted.</p>
           <div class="volume-row">
             <div class="volume-head">
               <span>Mic <strong id="micVolLabel">100%</strong></span>
@@ -308,6 +308,16 @@
               <div id="micMeterPeak" class="meter-peak"></div>
             </div>
             <input id="micVolume" type="range" min="0" max="400" value="100" step="1" />
+          </div>
+          <div class="volume-row">
+            <div class="volume-head">
+              <span>Device audio (speakers / Spotify) <strong id="desktopVolLabel">100%</strong></span>
+            </div>
+            <div class="meter" aria-hidden="true">
+              <div id="desktopMeterFill" class="meter-fill"></div>
+              <div id="desktopMeterPeak" class="meter-peak"></div>
+            </div>
+            <input id="desktopVolume" type="range" min="0" max="400" value="100" step="1" />
           </div>
         </div>
 
@@ -353,9 +363,14 @@
       const lastAudio = document.getElementById("lastAudio");
       const micSelect = document.getElementById("micSelect");
       const micVolume = document.getElementById("micVolume");
+      const desktopVolume = document.getElementById("desktopVolume");
       const micVolLabel = document.getElementById("micVolLabel");
+      const desktopVolLabel = document.getElementById("desktopVolLabel");
       const micMeterFill = document.getElementById("micMeterFill");
       const micMeterPeak = document.getElementById("micMeterPeak");
+      const desktopMeterFill = document.getElementById("desktopMeterFill");
+      const desktopMeterPeak = document.getElementById("desktopMeterPeak");
+      const volumeHint = document.getElementById("volumeHint");
 
       let mediaRecorder = null;
       let chunks = [];
@@ -365,10 +380,14 @@
       let objectUrls = new Map();
       let audioContext = null;
       let micVolumeGain = null;
+      let desktopVolumeGain = null;
       let micAnalyser = null;
+      let desktopAnalyser = null;
       let meterRaf = null;
-      let captureStream = null;
+      let captureStreams = [];
       const micPeakState = { value: 0, hold: 0 };
+      const desktopPeakState = { value: 0, hold: 0 };
+      const canDisplayMedia = !!(navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia);
 
       function setText(el, msg, kind) {
         el.textContent = msg;
@@ -391,21 +410,34 @@
         return ".webm";
       }
 
-      function sliderToGain() {
-        return Number(micVolume.value) / 100;
+      function sliderToGain(el) {
+        return Number(el.value) / 100;
       }
 
-      function syncVolumeLabel() {
+      function syncVolumeLabels() {
         micVolLabel.textContent = micVolume.value + "%";
+        desktopVolLabel.textContent = desktopVolume.value + "%";
       }
 
-      micVolume.addEventListener("input", () => {
-        syncVolumeLabel();
+      function applyLiveVolumes() {
+        syncVolumeLabels();
+        const now = audioContext ? audioContext.currentTime : 0;
         if (micVolumeGain && audioContext) {
-          micVolumeGain.gain.setTargetAtTime(sliderToGain(), audioContext.currentTime, 0.03);
+          micVolumeGain.gain.setTargetAtTime(sliderToGain(micVolume), now, 0.03);
         }
-      });
-      syncVolumeLabel();
+        if (desktopVolumeGain && audioContext) {
+          desktopVolumeGain.gain.setTargetAtTime(sliderToGain(desktopVolume), now, 0.03);
+        }
+      }
+
+      micVolume.addEventListener("input", applyLiveVolumes);
+      desktopVolume.addEventListener("input", applyLiveVolumes);
+      syncVolumeLabels();
+      if (!canDisplayMedia) {
+        volumeHint.textContent =
+          "Device audio needs screen sharing (desktop Chrome/Edge). On a phone, only the mic is recorded.";
+        desktopVolume.disabled = true;
+      }
 
       function getAnalyserLevel(analyser) {
         if (!analyser) return 0;
@@ -419,37 +451,61 @@
         return Math.min(1, Math.sqrt(sum / data.length) * 3.2);
       }
 
-      function setMeter(level) {
+      function setMeter(fillEl, peakEl, level, peakState) {
         const pct = Math.round(level * 100);
-        if (level >= micPeakState.value) {
-          micPeakState.value = level;
-          micPeakState.hold = 18;
-        } else if (micPeakState.hold > 0) {
-          micPeakState.hold -= 1;
+        if (level >= peakState.value) {
+          peakState.value = level;
+          peakState.hold = 18;
+        } else if (peakState.hold > 0) {
+          peakState.hold -= 1;
         } else {
-          micPeakState.value = Math.max(0, micPeakState.value - 0.02);
+          peakState.value = Math.max(0, peakState.value - 0.02);
         }
-        micMeterFill.style.setProperty("--level", pct + "%");
-        micMeterPeak.style.setProperty("--peak", Math.round(micPeakState.value * 100) + "%");
-        micMeterPeak.style.opacity = micPeakState.value > 0.02 ? "0.9" : "0";
+        fillEl.style.setProperty("--level", pct + "%");
+        peakEl.style.setProperty("--peak", Math.round(peakState.value * 100) + "%");
+        peakEl.style.opacity = peakState.value > 0.02 ? "0.9" : "0";
       }
 
       function stopMeters() {
         if (meterRaf) cancelAnimationFrame(meterRaf);
         meterRaf = null;
         micMeterFill.style.setProperty("--level", "0%");
+        desktopMeterFill.style.setProperty("--level", "0%");
         micMeterPeak.style.setProperty("--peak", "0%");
+        desktopMeterPeak.style.setProperty("--peak", "0%");
         micMeterPeak.style.opacity = "0";
+        desktopMeterPeak.style.opacity = "0";
         micPeakState.value = 0;
+        desktopPeakState.value = 0;
       }
 
       function startMeters() {
         stopMeters();
         const tick = () => {
-          setMeter(getAnalyserLevel(micAnalyser));
+          setMeter(micMeterFill, micMeterPeak, getAnalyserLevel(micAnalyser), micPeakState);
+          setMeter(
+            desktopMeterFill,
+            desktopMeterPeak,
+            getAnalyserLevel(desktopAnalyser),
+            desktopPeakState
+          );
           meterRaf = requestAnimationFrame(tick);
         };
         meterRaf = requestAnimationFrame(tick);
+      }
+
+      async function getSystemAudioStream() {
+        if (!canDisplayMedia) return null;
+        const displayStream = await navigator.mediaDevices.getDisplayMedia({
+          video: true,
+          audio: true,
+        });
+        for (const t of displayStream.getVideoTracks()) t.stop();
+        if (!displayStream.getAudioTracks().length) {
+          displayStream.getTracks().forEach((t) => t.stop());
+          throw new Error("No device audio — tick “Share tab/system audio” in the picker.");
+        }
+        return displayStream;
       }
 
       async function loadMics() {
@@ -539,16 +595,18 @@
         stopMeters();
         if (timer) clearInterval(timer);
         timer = null;
-        if (captureStream) {
-          captureStream.getTracks().forEach((t) => t.stop());
-          captureStream = null;
+        for (const stream of captureStreams) {
+          stream.getTracks().forEach((t) => t.stop());
         }
+        captureStreams = [];
         if (audioContext) {
           audioContext.close().catch(() => {});
           audioContext = null;
         }
         micVolumeGain = null;
+        desktopVolumeGain = null;
         micAnalyser = null;
+        desktopAnalyser = null;
         mediaRecorder = null;
         recPanel.classList.remove("recording");
         recBadge.classList.add("hidden");
@@ -730,7 +788,8 @@
         try {
           startBtn.disabled = true;
           setText(recStatus, "Starting…");
-          captureStream = await navigator.mediaDevices.getUserMedia({
+
+          const micStream = await navigator.mediaDevices.getUserMedia({
             audio: {
               deviceId: micSelect.value ? { exact: micSelect.value } : undefined,
               echoCancellation: false,
@@ -739,19 +798,57 @@
             },
             video: false,
           });
+          captureStreams.push(micStream);
+
+          let systemStream = null;
+          if (canDisplayMedia && !desktopVolume.disabled) {
+            try {
+              setText(recStatus, "Share a screen/tab and enable audio…");
+              systemStream = await getSystemAudioStream();
+              if (systemStream) captureStreams.push(systemStream);
+            } catch (err) {
+              console.warn(err);
+              setText(recStatus, "No device audio — recording mic only.");
+            }
+          }
 
           audioContext = new AudioContext({ sampleRate: 48000 });
           await audioContext.resume();
-          const source = audioContext.createMediaStreamSource(captureStream);
+          const merger = audioContext.createChannelMerger(2);
+          const dest = audioContext.createMediaStreamDestination();
+
+          const micSource = audioContext.createMediaStreamSource(micStream);
           micVolumeGain = audioContext.createGain();
-          micVolumeGain.gain.value = sliderToGain();
-          source.connect(micVolumeGain);
+          micVolumeGain.gain.value = sliderToGain(micVolume);
+          micSource.connect(micVolumeGain);
           micAnalyser = audioContext.createAnalyser();
           micAnalyser.fftSize = 1024;
           micAnalyser.smoothingTimeConstant = 0.5;
           micVolumeGain.connect(micAnalyser);
-          const dest = audioContext.createMediaStreamDestination();
-          micVolumeGain.connect(dest);
+          micVolumeGain.connect(merger, 0, 0);
+          micVolumeGain.connect(merger, 0, 1);
+
+          if (systemStream) {
+            const deskSource = audioContext.createMediaStreamSource(systemStream);
+            desktopVolumeGain = audioContext.createGain();
+            desktopVolumeGain.gain.value = sliderToGain(desktopVolume);
+            deskSource.connect(desktopVolumeGain);
+            desktopAnalyser = audioContext.createAnalyser();
+            desktopAnalyser.fftSize = 1024;
+            desktopAnalyser.smoothingTimeConstant = 0.5;
+            desktopVolumeGain.connect(desktopAnalyser);
+            if (deskSource.channelCount >= 2) {
+              const splitter = audioContext.createChannelSplitter(2);
+              desktopVolumeGain.connect(splitter);
+              splitter.connect(merger, 0, 0);
+              splitter.connect(merger, 1, 1);
+            } else {
+              desktopVolumeGain.connect(merger, 0, 0);
+              desktopVolumeGain.connect(merger, 0, 1);
+            }
+          }
+
+          merger.connect(dest);
 
           chunks = [];
           const mime = pickMime();
@@ -779,7 +876,13 @@
           timer = setInterval(() => {
             timerEl.textContent = fmt(Date.now() - startedAt);
           }, 250);
-          setText(recStatus, "Recording… watch the mic meter.", "ok");
+          setText(
+            recStatus,
+            systemStream
+              ? "Recording mic + device audio. Watch both meters."
+              : "Recording mic only.",
+            systemStream ? "ok" : ""
+          );
         } catch (err) {
           cleanupCapture();
           setText(recStatus, err.message, "error");
