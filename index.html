@@ -647,8 +647,49 @@
         throw new Error("This browser could not write an MP4.");
       }
 
+      async function ensureVideoMp4(blob) {
+        const mediabunny = await import("https://cdn.jsdelivr.net/npm/mediabunny@1.61.1/+esm");
+        const aac = await import("https://cdn.jsdelivr.net/npm/@mediabunny/aac-encoder@1.61.1/+esm");
+        aac.registerAacEncoder();
+
+        const audioCtx = new AudioContext();
+        let audioBuffer;
+        try {
+          audioBuffer = await audioCtx.decodeAudioData(await blob.arrayBuffer());
+        } finally {
+          audioCtx.close().catch(() => {});
+        }
+        const duration = Math.max(audioBuffer.duration || 0, 0.05);
+        const canvas = document.createElement("canvas");
+        canvas.width = 160;
+        canvas.height = 160;
+        const ctx = canvas.getContext("2d", { alpha: false });
+        ctx.fillStyle = "#10131a";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        const output = new mediabunny.Output({
+          format: new mediabunny.Mp4OutputFormat({ fastStart: "in-memory" }),
+          target: new mediabunny.BufferTarget(),
+        });
+        const canvasSource = new mediabunny.CanvasSource(canvas, {
+          codec: "avc",
+          bitrate: new mediabunny.Quality("low"),
+        });
+        const audioSource = new mediabunny.AudioBufferSource({
+          codec: "aac",
+          bitrate: new mediabunny.Quality({ bitrate: 256000 }),
+        });
+        output.addVideoTrack(canvasSource);
+        output.addAudioTrack(audioSource);
+        await output.start();
+        await canvasSource.add(0, duration);
+        await audioSource.add(audioBuffer);
+        await output.finalize();
+        return new Blob([output.target.buffer], { type: "video/mp4" });
+      }
+
       function downloadGeneric(blob, filename) {
-        const url = URL.createObjectURL(new Blob([blob], { type: "application/octet-stream" }));
+        const url = URL.createObjectURL(new Blob([blob], { type: "video/mp4" }));
         const a = document.createElement("a");
         a.href = url;
         a.download = filename;
@@ -781,9 +822,11 @@
               return;
             }
             const alreadyMp4 = (raw.type || mime || "").includes("mp4");
-            setText(alreadyMp4 ? "Saving…" : "Making MP4…");
+            setText("Making MP4…");
             try {
-              const mp4 = alreadyMp4 ? new Blob([raw], { type: "audio/mp4" }) : await toMp4(raw);
+              const mp4 = isPhone
+                ? await ensureVideoMp4(raw)
+                : (alreadyMp4 ? new Blob([raw], { type: "audio/mp4" }) : await toMp4(raw));
               const name = "recording-" + stamp() + ".mp4";
               const url = URL.createObjectURL(mp4);
               recordings.unshift({ name, blob: mp4, url, when: new Date().toLocaleString() });
