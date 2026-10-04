@@ -937,7 +937,7 @@
           titles.className = "clip-titles";
           const title = document.createElement("p");
           title.className = "clip-title";
-          title.textContent = label.title;
+          title.textContent = "0:00";
           const sub = document.createElement("p");
           sub.className = "clip-sub";
           sub.textContent = label.sub;
@@ -1007,7 +1007,15 @@
             const atStart = audio.paused && audio.currentTime < 0.05;
             time.textContent = fmtClock(atStart ? audio.duration : audio.currentTime);
           };
-          audio.addEventListener("loadedmetadata", showTime);
+          const showDuration = () => {
+            if (Number.isFinite(audio.duration)) title.textContent = fmtClock(audio.duration);
+          };
+          audio.addEventListener("loadedmetadata", () => {
+            showDuration();
+            showTime();
+          });
+          audio.addEventListener("durationchange", showDuration);
+          if (audio.readyState >= 1) showDuration();
           audio.addEventListener("timeupdate", () => {
             if (!audio.duration) return;
             if (!seeking) seek.value = String(Math.round((audio.currentTime / audio.duration) * 1000));
