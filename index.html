@@ -245,31 +245,54 @@
         color: #ff8f9a;
       }
       .clip-delete svg { width: 18px; height: 18px; }
-      .clip-confirm {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 8px;
-        padding: 8px 10px;
-        border-radius: 12px;
-        background: #10131a;
-        color: var(--text);
-        font-size: 0.85rem;
+      .confirm-overlay {
+        position: fixed;
+        inset: 0;
+        z-index: 50;
+        display: grid;
+        place-items: center;
+        padding: 24px;
+        background: rgba(6, 8, 12, 0.72);
       }
-      .clip-confirm div { display: flex; gap: 8px; }
-      .clip-confirm button {
-        padding: 6px 10px;
-        border-radius: 999px;
+      .confirm-card {
+        width: min(100%, 300px);
+        padding: 22px 18px 16px;
+        border-radius: 18px;
+        background: #1c212b;
+        border: 1px solid var(--border);
+        box-shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
+        text-align: center;
+      }
+      .confirm-card h2 {
+        margin: 0 0 6px;
+        font-size: 1.05rem;
+        font-weight: 650;
+      }
+      .confirm-card p {
+        margin: 0 0 18px;
+        color: var(--muted);
+        font-size: 0.88rem;
+      }
+      .confirm-actions {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+      }
+      .confirm-actions button {
+        padding: 12px 10px;
+        border-radius: 12px;
         border: 1px solid var(--border);
         background: transparent;
         color: var(--text);
-        font-size: 0.8rem;
+        font: inherit;
+        font-size: 0.9rem;
         font-weight: 650;
         cursor: pointer;
       }
-      .clip-confirm .yes {
-        border-color: color-mix(in srgb, var(--danger) 55%, var(--border));
-        color: #ff8f9a;
+      .confirm-actions .yes {
+        background: var(--danger);
+        border-color: transparent;
+        color: white;
       }
       .clip-player {
         display: grid;
@@ -382,6 +405,17 @@
       </section>
     </div>
 
+    <div id="deleteOverlay" class="confirm-overlay hidden">
+      <div class="confirm-card" role="dialog" aria-modal="true" aria-labelledby="deleteTitle">
+        <h2 id="deleteTitle">Delete this recording?</h2>
+        <p id="deleteSub"></p>
+        <div class="confirm-actions">
+          <button type="button" id="deleteCancel">Cancel</button>
+          <button type="button" id="deleteYes" class="yes">Delete</button>
+        </div>
+      </div>
+    </div>
+
     <script type="module">
       const micSelect = document.getElementById("micSelect");
       const moreBtn = document.getElementById("moreBtn");
@@ -393,6 +427,8 @@
       const recordHint = document.getElementById("recordHint");
       const timerEl = document.getElementById("timer");
       const listEl = document.getElementById("list");
+      const deleteOverlay = document.getElementById("deleteOverlay");
+      const deleteSub = document.getElementById("deleteSub");
 
       let mediaRecorder = null;
       let chunks = [];
@@ -408,6 +444,29 @@
       let waveSamples = new Array(WAVE_SLOTS).fill(0);
       let captureStreams = [];
       const recordings = [];
+      let pendingDelete = null;
+
+      function closeDelete() {
+        pendingDelete = null;
+        deleteOverlay.classList.add("hidden");
+      }
+
+      deleteOverlay.addEventListener("click", (event) => {
+        if (event.target === deleteOverlay) closeDelete();
+      });
+      document.getElementById("deleteCancel").addEventListener("click", closeDelete);
+      document.getElementById("deleteYes").addEventListener("click", () => {
+        const pending = pendingDelete;
+        if (!pending) return;
+        closeDelete();
+        pending.audio.pause();
+        URL.revokeObjectURL(pending.item.url);
+        URL.revokeObjectURL(pending.saveHref);
+        const index = recordings.indexOf(pending.item);
+        if (index >= 0) recordings.splice(index, 1);
+        renderList();
+        forgetRecording(pending.item.id).catch((err) => setText(err.message || String(err), "error"));
+      });
 
       function newId() {
         return crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random().toString(16).slice(2);
@@ -886,31 +945,11 @@
           del.className = "clip-delete";
           del.setAttribute("aria-label", "Delete");
           del.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"></path><path d="M8 6V4h8v2"></path><path d="M19 6l-1 14H6L5 6"></path><path d="M10 11v6"></path><path d="M14 11v6"></path></svg>';
-          const confirm = document.createElement("div");
-          confirm.className = "clip-confirm hidden";
-          const ask = document.createElement("span");
-          ask.textContent = "Delete this recording?";
-          const choices = document.createElement("div");
-          const cancel = document.createElement("button");
-          cancel.type = "button";
-          cancel.textContent = "Cancel";
-          const yes = document.createElement("button");
-          yes.type = "button";
-          yes.className = "yes";
-          yes.textContent = "Delete";
-          choices.append(cancel, yes);
-          confirm.append(ask, choices);
-          cancel.addEventListener("click", () => confirm.classList.add("hidden"));
-          yes.addEventListener("click", () => {
-            audio.pause();
-            URL.revokeObjectURL(item.url);
-            URL.revokeObjectURL(save.href);
-            const index = recordings.indexOf(item);
-            if (index >= 0) recordings.splice(index, 1);
-            renderList();
-            forgetRecording(item.id).catch((err) => setText(err.message || String(err), "error"));
+          del.addEventListener("click", () => {
+            pendingDelete = { item, audio, saveHref: save.href };
+            deleteSub.textContent = label.title + " · " + label.sub;
+            deleteOverlay.classList.remove("hidden");
           });
-          del.addEventListener("click", () => confirm.classList.remove("hidden"));
           const actions = document.createElement("div");
           actions.className = "clip-actions";
           actions.append(save, del);
@@ -980,7 +1019,7 @@
             seeking = false;
           });
           player.append(toggle, seek, time);
-          li.append(head, confirm, player, audio);
+          li.append(head, player, audio);
           listEl.appendChild(li);
         }
       }
