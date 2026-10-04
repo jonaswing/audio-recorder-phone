@@ -571,27 +571,38 @@
       async function toMp4(blob) {
         const mediabunny = await import("https://cdn.jsdelivr.net/npm/mediabunny@1.61.1/+esm");
         const aac = await import("https://cdn.jsdelivr.net/npm/@mediabunny/aac-encoder@1.61.1/+esm");
-        if (!(await mediabunny.canEncodeAudio("aac"))) aac.registerAacEncoder();
-        const input = new mediabunny.Input({
-          source: new mediabunny.BlobSource(blob),
-          formats: mediabunny.ALL_FORMATS,
-        });
-        const output = new mediabunny.Output({
-          format: new mediabunny.Mp4OutputFormat(),
-          target: new mediabunny.BufferTarget(),
-        });
-        const conversion = await mediabunny.Conversion.init({
-          input,
-          output,
-          audio: {
+        aac.registerAacEncoder();
+
+        const attempts = [
+          {
             codec: "aac",
             numberOfChannels: 2,
             sampleRate: 48000,
-            quality: new mediabunny.Quality({ bitrate: 384000, bitrateMode: "constant" }),
+            quality: new mediabunny.Quality({ bitrate: 256000 }),
           },
-        });
-        await conversion.execute();
-        return new Blob([output.target.buffer], { type: "audio/mp4" });
+          {
+            codec: "aac",
+            numberOfChannels: 2,
+            quality: new mediabunny.Quality("high"),
+          },
+          { codec: "aac" },
+        ];
+
+        for (const audio of attempts) {
+          const input = new mediabunny.Input({
+            source: new mediabunny.BlobSource(blob),
+            formats: mediabunny.ALL_FORMATS,
+          });
+          const output = new mediabunny.Output({
+            format: new mediabunny.Mp4OutputFormat(),
+            target: new mediabunny.BufferTarget(),
+          });
+          const conversion = await mediabunny.Conversion.init({ input, output, audio });
+          if (!conversion.isValid) continue;
+          await conversion.execute();
+          return new Blob([output.target.buffer], { type: "audio/mp4" });
+        }
+        throw new Error("This browser could not write an MP4.");
       }
 
       async function saveFile(blob, filename) {
