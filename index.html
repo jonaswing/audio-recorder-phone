@@ -444,7 +444,7 @@
       syncVolumeLabels();
       if (isPhone) {
         document.getElementById("deviceRow").classList.add("hidden");
-        volumeHint.textContent = "Records the phone mic in full quality. A Bluetooth headset records in call quality — use the built-in mic.";
+        volumeHint.textContent = "Records the phone microphone and saves an MP4 on this phone.";
       } else if (!canDisplayMedia) {
         desktopVolume.disabled = true;
         volumeHint.textContent = "This browser cannot capture stereo device audio. Use desktop Chrome or Edge.";
@@ -529,16 +529,15 @@
           opt.textContent = "Default microphone";
           micSelect.appendChild(opt);
         }
-        const builtIn = mics.find((m) =>
-          /built-?in|iphone|ipad|pixel|samsung|internal|microphone array|speakerphone/i.test(m.label || "") &&
-          !/bluetooth|airpods|headset|hands-?free/i.test(m.label || "")
-        );
-        if (builtIn) micSelect.value = builtIn.deviceId;
+        const saved = localStorage.getItem("audio-recorder-mic");
+        const earpiece = mics.find((m) => /headset\s*earpiece|earpiece/i.test(m.label || ""));
+        const preferred = mics.find((m) => m.deviceId === saved) || earpiece;
+        if (preferred) micSelect.value = preferred.deviceId;
       }
 
-      function isCallMic(label) {
-        return /bluetooth|airpods|headset|hands-?free|communications/i.test(label || "");
-      }
+      micSelect.addEventListener("change", () => {
+        if (micSelect.value) localStorage.setItem("audio-recorder-mic", micSelect.value);
+      });
 
       async function openMic() {
         const deviceId = micSelect.value ? { exact: micSelect.value } : undefined;
@@ -713,12 +712,6 @@
         try {
           startBtn.disabled = true;
           setText("Starting…");
-          const label = micSelect.selectedOptions[0]?.textContent || "";
-          if (isPhone && isCallMic(label)) {
-            setText("That mic is a Bluetooth headset, so it records in phone-call quality. Pick the built-in mic.", "error");
-            startBtn.disabled = false;
-            return;
-          }
           const micStream = await openMic();
           captureStreams.push(micStream);
 
