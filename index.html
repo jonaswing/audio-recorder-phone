@@ -493,6 +493,8 @@
       let captureStreams = [];
       const recordings = [];
       let pendingDelete = null;
+      let micTouched = false;
+      let lastMicKey = "";
 
       function closeDelete() {
         pendingDelete = null;
@@ -631,14 +633,19 @@
         }
         const devices = await navigator.mediaDevices.enumerateDevices();
         const mics = devices.filter((d) => d.kind === "audioinput");
+        const key = mics.map((m) => m.deviceId + "\n" + (m.label || "")).join("\n");
+        if (key === lastMicKey && monitorStream && monitorStream.getAudioTracks().some((t) => t.readyState === "live")) return;
+        lastMicKey = key;
+        const bluetooth = mics.find((m) => isBluetoothMic(m.label));
         const earpiece = mics.find((m) => isHeadsetEarpiece(m.label));
-        const ordered = earpiece ? [earpiece, ...mics.filter((m) => m !== earpiece)] : mics;
+        const preferred = bluetooth || earpiece;
+        const ordered = preferred ? [preferred, ...mics.filter((m) => m !== preferred)] : mics;
+        const previous = micSelect.value;
         micSelect.innerHTML = "";
         for (const mic of ordered) {
           const opt = document.createElement("option");
           opt.value = mic.deviceId;
           opt.textContent = mic.label || "Microphone";
-          if (mic === earpiece) opt.selected = true;
           micSelect.appendChild(opt);
         }
         if (!mics.length) {
@@ -647,13 +654,19 @@
           opt.textContent = "Default microphone";
           micSelect.appendChild(opt);
         }
-        if (earpiece) micSelect.value = earpiece.deviceId;
+        if (micTouched && mics.some((m) => m.deviceId === previous)) micSelect.value = previous;
+        else if (preferred) micSelect.value = preferred.deviceId;
         await startMonitor();
       }
 
       function isHeadsetEarpiece(label) {
         const name = (label || "").toLowerCase().replace(/[^a-z]+/g, " ");
         return name.includes("headset") && name.includes("earpiece");
+      }
+
+      function isBluetoothMic(label) {
+        const name = (label || "").toLowerCase();
+        return name.includes("bluetooth") || name.includes("airpod");
       }
 
       async function openMic() {
@@ -681,7 +694,12 @@
         let lastErr = null;
         for (const audio of attempts) {
           try {
-            return await navigator.mediaDevices.getUserMedia({ audio, video: false });
+            const stream = await navigator.mediaDevices.getUserMedia({ audio, video: false });
+            const track = stream.getAudioTracks()[0];
+            if (track) {
+              try { track.contentHint = "music"; } catch { /* ignore */ }
+            }
+            return stream;
           } catch (err) {
             lastErr = err;
             if (err.name !== "OverconstrainedError" && err.name !== "ConstraintError") throw err;
@@ -811,8 +829,13 @@
       pageShield.addEventListener("wheel", (event) => event.preventDefault(), { passive: false });
 
       micSelect.addEventListener("change", () => {
+        micTouched = true;
         if (mediaRecorder) return;
         startMonitor().catch((err) => setText(err.message, "error"));
+      });
+      navigator.mediaDevices?.addEventListener("devicechange", () => {
+        if (mediaRecorder) return;
+        loadMics().catch((err) => setText(err.message, "error"));
       });
       document.addEventListener("pointerdown", () => {
         if (monitorContext && monitorContext.state === "suspended") monitorContext.resume();
