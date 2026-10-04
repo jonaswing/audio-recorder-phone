@@ -328,6 +328,11 @@
         color: #12151c;
       }
       .confirm-actions .save:disabled { opacity: 0.45; }
+      .confirm-actions .discard {
+        background: transparent;
+        border-color: color-mix(in srgb, var(--danger) 55%, var(--border));
+        color: #ff8f9a;
+      }
       .clip-player {
         display: grid;
         grid-template-columns: 40px 1fr auto;
@@ -446,6 +451,7 @@
         <input id="nameInput" type="text" maxlength="80" placeholder="Recording name" autocomplete="off" enterkeyhint="done" />
         <div class="confirm-actions single">
           <button type="submit" id="nameSave" class="save">Save</button>
+          <button type="button" id="nameDiscard" class="discard">Delete</button>
         </div>
       </form>
     </div>
@@ -479,6 +485,7 @@
       const nameInput = document.getElementById("nameInput");
       const nameNote = document.getElementById("nameNote");
       const nameSave = document.getElementById("nameSave");
+      const nameDiscard = document.getElementById("nameDiscard");
 
       let mediaRecorder = null;
       let chunks = [];
@@ -496,6 +503,7 @@
       const recordings = [];
       let pendingDelete = null;
       let naming = null;
+      let skipSave = false;
 
       function closeDelete() {
         pendingDelete = null;
@@ -681,6 +689,33 @@
 
       nameForm.addEventListener("submit", (event) => {
         finishName(event).catch((err) => setText(err.message || String(err), "error"));
+      });
+
+      async function discardNamedRecording() {
+        const item = naming && naming.item;
+        if (!item) skipSave = true;
+        naming = null;
+        nameOverlay.classList.remove("keyboard");
+        nameOverlay.classList.add("hidden");
+        if (!item) {
+          setText("Ready.");
+          return;
+        }
+        URL.revokeObjectURL(item.url);
+        const index = recordings.indexOf(item);
+        if (index >= 0) recordings.splice(index, 1);
+        renderList();
+        try {
+          await forgetRecording(item.id);
+        } catch (err) {
+          setText(err.message || String(err), "error");
+          return;
+        }
+        setText("Ready.");
+      }
+
+      nameDiscard.addEventListener("click", () => {
+        discardNamedRecording().catch((err) => setText(err.message || String(err), "error"));
       });
 
       function pickMime() {
@@ -1225,6 +1260,13 @@
               const mp4 = isPhone
                 ? await ensureVideoMp4(raw)
                 : (alreadyMp4 ? new Blob([raw], { type: "audio/mp4" }) : await toMp4(raw));
+              if (skipSave) {
+                skipSave = false;
+                naming = null;
+                nameOverlay.classList.add("hidden");
+                setText("Ready.");
+                return;
+              }
               const item = {
                 id: newId(),
                 name: "recording-" + stampFrom(namedAt) + ".mp4",
@@ -1242,9 +1284,11 @@
               nameInput.focus();
               setText("Ready.");
             } catch (err) {
+              const skipped = skipSave;
+              skipSave = false;
               naming = null;
               nameOverlay.classList.add("hidden");
-              setText(err.message || String(err), "error");
+              setText(skipped ? "Ready." : (err.message || String(err)), skipped ? undefined : "error");
             }
           };
           if (isPhone) mediaRecorder.start();
