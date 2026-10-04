@@ -374,6 +374,73 @@
       let waveSamples = new Array(WAVE_SLOTS).fill(0);
       let captureStreams = [];
       const recordings = [];
+
+      function newId() {
+        return crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random().toString(16).slice(2);
+      }
+
+      function openDb() {
+        return new Promise((resolve, reject) => {
+          const request = indexedDB.open("audio-recorder", 1);
+          request.onupgradeneeded = () => {
+            const db = request.result;
+            if (!db.objectStoreNames.contains("recordings")) {
+              db.createObjectStore("recordings", { keyPath: "id" });
+            }
+          };
+          request.onsuccess = () => resolve(request.result);
+          request.onerror = () => reject(request.error);
+        });
+      }
+
+      async function rememberRecording(item) {
+        const db = await openDb();
+        await new Promise((resolve, reject) => {
+          const tx = db.transaction("recordings", "readwrite");
+          tx.objectStore("recordings").put({
+            id: item.id,
+            name: item.name,
+            at: item.at.getTime(),
+            blob: item.blob,
+          });
+          tx.oncomplete = () => resolve();
+          tx.onerror = () => reject(tx.error);
+        });
+        db.close();
+      }
+
+      async function forgetRecording(id) {
+        const db = await openDb();
+        await new Promise((resolve, reject) => {
+          const tx = db.transaction("recordings", "readwrite");
+          tx.objectStore("recordings").delete(id);
+          tx.oncomplete = () => resolve();
+          tx.onerror = () => reject(tx.error);
+        });
+        db.close();
+      }
+
+      async function loadSavedRecordings() {
+        const db = await openDb();
+        const rows = await new Promise((resolve, reject) => {
+          const request = db.transaction("recordings", "readonly").objectStore("recordings").getAll();
+          request.onsuccess = () => resolve(request.result || []);
+          request.onerror = () => reject(request.error);
+        });
+        db.close();
+        rows.sort((a, b) => b.at - a.at);
+        recordings.length = 0;
+        for (const row of rows) {
+          recordings.push({
+            id: row.id,
+            name: row.name,
+            blob: row.blob,
+            at: new Date(row.at),
+            url: URL.createObjectURL(row.blob),
+          });
+        }
+        renderList();
+      }
       const canDisplayMedia = !!(navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia);
       const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
       const isPhone = isIOS || /Android|Mobile/i.test(navigator.userAgent);
@@ -766,6 +833,7 @@
             const index = recordings.indexOf(item);
             if (index >= 0) recordings.splice(index, 1);
             renderList();
+            forgetRecording(item.id).catch((err) => setText(err.message || String(err), "error"));
           });
           const actions = document.createElement("div");
           actions.className = "clip-actions";
@@ -910,10 +978,16 @@
               const mp4 = isPhone
                 ? await ensureVideoMp4(raw)
                 : (alreadyMp4 ? new Blob([raw], { type: "audio/mp4" }) : await toMp4(raw));
-              const name = "recording-" + stamp() + ".mp4";
-              const url = URL.createObjectURL(mp4);
-              recordings.unshift({ name, blob: mp4, url, at: new Date() });
+              const item = {
+                id: newId(),
+                name: "recording-" + stamp() + ".mp4",
+                blob: mp4,
+                url: URL.createObjectURL(mp4),
+                at: new Date(),
+              };
+              recordings.unshift(item);
               renderList();
+              await rememberRecording(item);
               setText("MP4 ready. Tap Download MP4 to keep it on your phone.", "ok");
             } catch (err) {
               setText(err.message || String(err), "error");
@@ -939,7 +1013,7 @@
       };
 
       startWaveLoop();
-      renderList();
+      loadSavedRecordings().catch((err) => setText(err.message || String(err), "error"));
       loadMics().catch((err) => setText(err.message, "error"));
     </script>
   </body>
