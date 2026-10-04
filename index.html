@@ -320,7 +320,7 @@
 
         <div class="volume-panel">
           <p class="volume-title">Volume controls</p>
-          <p id="volumeHint" class="hint">The file stays on this phone. Nothing is uploaded.</p>
+          <p id="volumeHint" class="hint">Device audio is recorded in stereo. When asked, share the whole screen and turn on system audio.</p>
           <div class="volume-row">
             <div class="volume-head">
               <span>Mic <strong id="micVolLabel">100%</strong></span>
@@ -442,7 +442,7 @@
       syncVolumeLabels();
       if (!canDisplayMedia) {
         desktopVolume.disabled = true;
-        volumeHint.textContent = "Phone mic only. The MP4 is saved on this phone.";
+        volumeHint.textContent = "This browser cannot capture stereo device audio. Use desktop Chrome or Edge.";
       }
 
       function getAnalyserLevel(analyser) {
@@ -496,7 +496,7 @@
       }
 
       function pickMime() {
-        const types = ["audio/mp4", "audio/webm;codecs=opus", "audio/webm"];
+        const types = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4"];
         return types.find((t) => MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(t)) || "";
       }
 
@@ -526,14 +526,39 @@
 
       async function getSystemAudioStream() {
         const displayStream = await navigator.mediaDevices.getDisplayMedia({
-          video: true,
-          audio: true,
+          video: { frameRate: 5, width: 320, height: 180 },
+          audio: {
+            echoCancellation: false,
+            noiseSuppression: false,
+            autoGainControl: false,
+            channelCount: 2,
+            sampleRate: 48000,
+            suppressLocalAudioPlayback: false,
+          },
         });
-        for (const t of displayStream.getVideoTracks()) t.stop();
-        if (!displayStream.getAudioTracks().length) {
+        const audio = displayStream.getAudioTracks()[0];
+        if (!audio) {
           displayStream.getTracks().forEach((t) => t.stop());
-          throw new Error("No device audio was shared.");
+          throw new Error("No device audio was shared. Turn on system audio for the whole screen.");
         }
+        try { audio.contentHint = "music"; } catch { /* ignore */ }
+        if (audio.applyConstraints) {
+          try {
+            await audio.applyConstraints({
+              echoCancellation: false,
+              noiseSuppression: false,
+              autoGainControl: false,
+              channelCount: 2,
+              sampleRate: 48000,
+            });
+          } catch { /* ignore */ }
+        }
+        const video = document.createElement("video");
+        video.muted = true;
+        video.playsInline = true;
+        video.srcObject = displayStream;
+        video.play().catch(() => {});
+        displayStream._keepAlive = video;
         return displayStream;
       }
 
@@ -560,9 +585,6 @@
       }
 
       async function toMp4(blob) {
-        if ((blob.type || "").includes("mp4")) {
-          return new Blob([blob], { type: "audio/mp4" });
-        }
         const mediabunny = await import("https://cdn.jsdelivr.net/npm/mediabunny@1.61.1/+esm");
         const aac = await import("https://cdn.jsdelivr.net/npm/@mediabunny/aac-encoder@1.61.1/+esm");
         if (!(await mediabunny.canEncodeAudio("aac"))) aac.registerAacEncoder();
@@ -577,7 +599,12 @@
         const conversion = await mediabunny.Conversion.init({
           input,
           output,
-          audio: { codec: "aac" },
+          audio: {
+            codec: "aac",
+            numberOfChannels: 2,
+            sampleRate: 48000,
+            quality: new mediabunny.Quality({ bitrate: 384000 }),
+          },
         });
         await conversion.execute();
         return new Blob([output.target.buffer], { type: "audio/mp4" });
@@ -663,36 +690,51 @@
             }
           }
 
-          audioContext = new AudioContext({ latencyHint: "playback" });
+          audioContext = new AudioContext({ sampleRate: 48000, latencyHint: "playback" });
           await audioContext.resume();
+          const merger = audioContext.createChannelMerger(2);
           const dest = audioContext.createMediaStreamDestination();
-          const master = audioContext.createGain();
-          master.gain.value = 1;
-          master.connect(dest);
+          dest.channelCount = 2;
+          dest.channelCountMode = "explicit";
+          dest.channelInterpretation = "speakers";
 
           const micSource = audioContext.createMediaStreamSource(micStream);
+          micSource.channelCount = 1;
+          micSource.channelCountMode = "explicit";
           micVolumeGain = audioContext.createGain();
           micVolumeGain.gain.value = sliderToGain(micVolume);
           micSource.connect(micVolumeGain);
           micAnalyser = audioContext.createAnalyser();
-          micAnalyser.fftSize = 1024;
+          micAnalyser.fftSize = 2048;
           micVolumeGain.connect(micAnalyser);
-          micVolumeGain.connect(master);
+          micVolumeGain.connect(merger, 0, 0);
+          micVolumeGain.connect(merger, 0, 1);
 
           if (systemStream) {
             const deskSource = audioContext.createMediaStreamSource(systemStream);
+            deskSource.channelCount = 2;
+            deskSource.channelCountMode = "explicit";
+            deskSource.channelInterpretation = "speakers";
             desktopVolumeGain = audioContext.createGain();
+            desktopVolumeGain.channelCount = 2;
+            desktopVolumeGain.channelCountMode = "explicit";
+            desktopVolumeGain.channelInterpretation = "speakers";
             desktopVolumeGain.gain.value = sliderToGain(desktopVolume);
             deskSource.connect(desktopVolumeGain);
             desktopAnalyser = audioContext.createAnalyser();
-            desktopAnalyser.fftSize = 1024;
+            desktopAnalyser.fftSize = 2048;
             desktopVolumeGain.connect(desktopAnalyser);
-            desktopVolumeGain.connect(master);
+            const splitter = audioContext.createChannelSplitter(2);
+            desktopVolumeGain.connect(splitter);
+            splitter.connect(merger, 0, 0);
+            splitter.connect(merger, 1, 1);
           }
+
+          merger.connect(dest);
 
           chunks = [];
           const mime = pickMime();
-          mediaRecorder = new MediaRecorder(dest.stream, mime ? { mimeType: mime, audioBitsPerSecond: 192000 } : undefined);
+          mediaRecorder = new MediaRecorder(dest.stream, mime ? { mimeType: mime, audioBitsPerSecond: 512000 } : undefined);
           mediaRecorder.ondataavailable = (e) => {
             if (e.data && e.data.size) chunks.push(e.data);
           };
