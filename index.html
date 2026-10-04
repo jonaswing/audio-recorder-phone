@@ -171,46 +171,129 @@
         font-size: 0.95rem;
         font-weight: 650;
       }
+      .clips {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
       ul.phone-list {
         list-style: none;
         margin: 0;
         padding: 0;
         display: flex;
         flex-direction: column;
-        gap: 10px;
+        gap: 12px;
       }
       li.item {
         display: flex;
         flex-direction: column;
-        gap: 8px;
-        padding-top: 10px;
-        border-top: 1px solid var(--border);
-        font-size: 0.85rem;
-        color: var(--muted);
-      }
-      li.item:first-child { border-top: 0; padding-top: 0; }
-      li.item .meta {
-        display: flex;
-        justify-content: space-between;
-        gap: 8px;
-        align-items: center;
-      }
-      li.item strong { color: var(--text); font-weight: 600; }
-      li.item button,
-      li.item a.save {
-        padding: 8px 12px;
-        font-size: 0.85rem;
-        width: auto;
-        align-self: flex-start;
-        margin: 0;
-        border-radius: 12px;
-        font-weight: 600;
-        text-decoration: none;
-        background: #1a2130;
+        gap: 12px;
+        padding: 14px;
         border: 1px solid var(--border);
-        color: var(--text);
+        border-radius: 16px;
+        background: color-mix(in srgb, var(--panel) 88%, transparent);
       }
-      audio { width: 100%; height: 40px; }
+      li.item.empty {
+        color: var(--muted);
+        text-align: center;
+        font-size: 0.9rem;
+      }
+      .clip-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }
+      .clip-title {
+        margin: 0;
+        color: var(--text);
+        font-size: 1.02rem;
+        font-weight: 650;
+      }
+      .clip-sub {
+        margin: 2px 0 0;
+        color: var(--muted);
+        font-size: 0.78rem;
+      }
+      .clip-save {
+        flex-shrink: 0;
+        padding: 8px 12px;
+        border-radius: 999px;
+        border: 1px solid var(--border);
+        background: #10131a;
+        color: var(--text);
+        text-decoration: none;
+        font-size: 0.8rem;
+        font-weight: 650;
+      }
+      .clip-player {
+        display: grid;
+        grid-template-columns: 40px 1fr auto;
+        align-items: center;
+        gap: 10px;
+      }
+      .clip-toggle {
+        width: 40px;
+        height: 40px;
+        border: 0;
+        border-radius: 50%;
+        padding: 0;
+        display: grid;
+        place-items: center;
+        background: #e35d6a;
+        color: white;
+        cursor: pointer;
+      }
+      .clip-toggle svg { width: 16px; height: 16px; }
+      .clip-toggle .icon-pause { display: none; }
+      .clip-toggle.is-playing .icon-play { display: none; }
+      .clip-toggle.is-playing .icon-pause { display: block; }
+      .clip-seek {
+        -webkit-appearance: none;
+        appearance: none;
+        width: 100%;
+        height: 28px;
+        margin: 0;
+        padding: 0;
+        background: transparent;
+        cursor: pointer;
+      }
+      .clip-seek::-webkit-slider-runnable-track {
+        height: 6px;
+        border-radius: 999px;
+        background: #2a3140;
+      }
+      .clip-seek::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        appearance: none;
+        width: 16px;
+        height: 16px;
+        margin-top: -5px;
+        border: 0;
+        border-radius: 50%;
+        background: #e8ecf4;
+      }
+      .clip-seek::-moz-range-track {
+        height: 6px;
+        border: 0;
+        border-radius: 999px;
+        background: #2a3140;
+      }
+      .clip-seek::-moz-range-thumb {
+        width: 16px;
+        height: 16px;
+        border: 0;
+        border-radius: 50%;
+        background: #e8ecf4;
+      }
+      .clip-time {
+        min-width: 2.6em;
+        text-align: right;
+        color: var(--muted);
+        font-size: 0.78rem;
+        font-variant-numeric: tabular-nums;
+      }
+      .item audio { display: none; }
       .hidden { display: none !important; }
     </style>
   </head>
@@ -248,7 +331,7 @@
         <p class="status" id="recStatus">Ready.</p>
       </div>
 
-      <section id="listCard" class="controls">
+      <section id="listCard" class="clips">
         <p class="panel-title">On this phone</p>
         <ul id="list" class="phone-list"></ul>
       </section>
@@ -617,32 +700,117 @@
         return new Blob([output.target.buffer], { type: "video/mp4" });
       }
 
+      function fmtClock(seconds) {
+        if (!Number.isFinite(seconds) || seconds < 0) return "0:00";
+        const s = Math.floor(seconds);
+        return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0");
+      }
+
+      function clipWhen(item) {
+        const d = item.at instanceof Date ? item.at : new Date(item.when);
+        if (Number.isNaN(d.getTime())) return { title: "Recording", sub: item.when || "" };
+        return {
+          title: d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }),
+          sub: d.toLocaleDateString([], { month: "short", day: "numeric" }),
+        };
+      }
+
       function renderList() {
         listEl.innerHTML = "";
         if (!recordings.length) {
           const li = document.createElement("li");
-          li.className = "item";
+          li.className = "item empty";
           li.textContent = "No recordings yet.";
           listEl.appendChild(li);
           return;
         }
         for (const item of recordings) {
+          const label = clipWhen(item);
           const li = document.createElement("li");
           li.className = "item";
-          const meta = document.createElement("div");
-          meta.className = "meta";
-          meta.innerHTML = "<strong>" + item.name + "</strong><span>" + item.when + "</span>";
-          const audio = document.createElement("audio");
-          audio.controls = true;
-          audio.setAttribute("playsinline", "");
-          audio.src = item.url;
+          const head = document.createElement("div");
+          head.className = "clip-head";
+          const titles = document.createElement("div");
+          const title = document.createElement("p");
+          title.className = "clip-title";
+          title.textContent = label.title;
+          const sub = document.createElement("p");
+          sub.className = "clip-sub";
+          sub.textContent = label.sub;
+          titles.append(title, sub);
           const save = document.createElement("a");
-          save.className = "save";
+          save.className = "clip-save";
           save.href = URL.createObjectURL(new Blob([item.blob], { type: "application/octet-stream" }));
           save.download = item.name;
-          save.textContent = "Download MP4";
-          save.addEventListener("click", () => setText("Downloading " + item.name + " to your phone…", "ok"));
-          li.append(meta, audio, save);
+          save.textContent = "Download";
+          save.addEventListener("click", () => setText("Downloading " + item.name + "…", "ok"));
+          head.append(titles, save);
+
+          const audio = document.createElement("audio");
+          audio.preload = "metadata";
+          audio.setAttribute("playsinline", "");
+          audio.src = item.url;
+          const player = document.createElement("div");
+          player.className = "clip-player";
+          const toggle = document.createElement("button");
+          toggle.type = "button";
+          toggle.className = "clip-toggle";
+          toggle.setAttribute("aria-label", "Play");
+          toggle.innerHTML = '<svg class="icon-play" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M8 5v14l12-7z"></path></svg><svg class="icon-pause" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M6 5h4v14H6zm8 0h4v14h-4z"></path></svg>';
+          const seek = document.createElement("input");
+          seek.className = "clip-seek";
+          seek.type = "range";
+          seek.min = "0";
+          seek.max = "1000";
+          seek.value = "0";
+          seek.setAttribute("aria-label", "Playback position");
+          const time = document.createElement("span");
+          time.className = "clip-time";
+          time.textContent = "0:00";
+          let seeking = false;
+          toggle.addEventListener("click", () => {
+            if (audio.paused) {
+              document.querySelectorAll("audio").forEach((other) => {
+                if (other !== audio) other.pause();
+              });
+              audio.play();
+            } else {
+              audio.pause();
+            }
+          });
+          audio.addEventListener("play", () => {
+            toggle.classList.add("is-playing");
+            toggle.setAttribute("aria-label", "Pause");
+          });
+          audio.addEventListener("pause", () => {
+            toggle.classList.remove("is-playing");
+            toggle.setAttribute("aria-label", "Play");
+          });
+          const showTime = () => {
+            const atStart = audio.paused && audio.currentTime < 0.05;
+            time.textContent = fmtClock(atStart ? audio.duration : audio.currentTime);
+          };
+          audio.addEventListener("loadedmetadata", showTime);
+          audio.addEventListener("timeupdate", () => {
+            if (!audio.duration) return;
+            if (!seeking) seek.value = String(Math.round((audio.currentTime / audio.duration) * 1000));
+            showTime();
+          });
+          audio.addEventListener("ended", () => {
+            seek.value = "0";
+            time.textContent = fmtClock(audio.duration);
+          });
+          seek.addEventListener("pointerdown", () => { seeking = true; });
+          seek.addEventListener("input", () => {
+            if (!audio.duration) return;
+            time.textContent = fmtClock((seek.value / 1000) * audio.duration);
+          });
+          seek.addEventListener("change", () => {
+            if (audio.duration) audio.currentTime = (seek.value / 1000) * audio.duration;
+            seeking = false;
+          });
+          player.append(toggle, seek, time);
+          li.append(head, player, audio);
           listEl.appendChild(li);
         }
       }
@@ -718,7 +886,7 @@
                 : (alreadyMp4 ? new Blob([raw], { type: "audio/mp4" }) : await toMp4(raw));
               const name = "recording-" + stamp() + ".mp4";
               const url = URL.createObjectURL(mp4);
-              recordings.unshift({ name, blob: mp4, url, when: new Date().toLocaleString() });
+              recordings.unshift({ name, blob: mp4, url, at: new Date() });
               renderList();
               setText("MP4 ready. Tap Download MP4 to keep it on your phone.", "ok");
             } catch (err) {
