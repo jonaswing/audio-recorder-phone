@@ -669,6 +669,37 @@
         return name.includes("bluetooth") || name.includes("airpod");
       }
 
+      function closerBluetooth(context, source) {
+        const warmth = context.createBiquadFilter();
+        warmth.type = "lowshelf";
+        warmth.frequency.value = 480;
+        warmth.gain.value = 9;
+        const body = context.createBiquadFilter();
+        body.type = "peaking";
+        body.frequency.value = 320;
+        body.Q.value = 0.7;
+        body.gain.value = 5;
+        const presence = context.createBiquadFilter();
+        presence.type = "peaking";
+        presence.frequency.value = 2600;
+        presence.Q.value = 0.8;
+        presence.gain.value = 4.5;
+        const compressor = context.createDynamicsCompressor();
+        compressor.threshold.value = -30;
+        compressor.knee.value = 8;
+        compressor.ratio.value = 2.2;
+        compressor.attack.value = 0.006;
+        compressor.release.value = 0.16;
+        const gain = context.createGain();
+        gain.gain.value = 1.7;
+        source.connect(warmth);
+        warmth.connect(body);
+        body.connect(presence);
+        presence.connect(compressor);
+        compressor.connect(gain);
+        return gain;
+      }
+
       async function openMic() {
         const deviceId = micSelect.value ? { exact: micSelect.value } : undefined;
         const attempts = [
@@ -678,6 +709,10 @@
             noiseSuppression: { exact: false },
             autoGainControl: { exact: false },
             voiceIsolation: { exact: false },
+            googEchoCancellation: false,
+            googNoiseSuppression: false,
+            googAutoGainControl: false,
+            googHighpassFilter: false,
             channelCount: { ideal: 1 },
             sampleRate: { ideal: 48000 },
             sampleSize: { ideal: 16 },
@@ -687,6 +722,10 @@
             echoCancellation: false,
             noiseSuppression: false,
             autoGainControl: false,
+            googEchoCancellation: false,
+            googNoiseSuppression: false,
+            googAutoGainControl: false,
+            googHighpassFilter: false,
             channelCount: { ideal: 1 },
             sampleRate: { ideal: 48000 },
           },
@@ -1153,7 +1192,14 @@
           }
 
           let recordStream = micStream;
-          if (!isPhone) {
+          if (isPhone && isBluetoothMic(micSelect.selectedOptions[0] ? micSelect.selectedOptions[0].textContent : "")) {
+            audioContext = new AudioContext();
+            await audioContext.resume();
+            const dest = audioContext.createMediaStreamDestination();
+            const micSource = audioContext.createMediaStreamSource(micStream);
+            closerBluetooth(audioContext, micSource).connect(dest);
+            recordStream = dest.stream;
+          } else if (!isPhone) {
             audioContext = new AudioContext();
             await audioContext.resume();
             const dest = audioContext.createMediaStreamDestination();
