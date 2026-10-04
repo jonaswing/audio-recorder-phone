@@ -516,11 +516,14 @@
         }
         const devices = await navigator.mediaDevices.enumerateDevices();
         const mics = devices.filter((d) => d.kind === "audioinput");
+        const earpiece = mics.find((m) => isHeadsetEarpiece(m.label));
+        const ordered = earpiece ? [earpiece, ...mics.filter((m) => m !== earpiece)] : mics;
         micSelect.innerHTML = "";
-        for (const mic of mics) {
+        for (const mic of ordered) {
           const opt = document.createElement("option");
           opt.value = mic.deviceId;
           opt.textContent = mic.label || "Microphone";
+          if (mic === earpiece) opt.selected = true;
           micSelect.appendChild(opt);
         }
         if (!mics.length) {
@@ -529,15 +532,13 @@
           opt.textContent = "Default microphone";
           micSelect.appendChild(opt);
         }
-        const saved = localStorage.getItem("audio-recorder-mic");
-        const earpiece = mics.find((m) => /headset\s*earpiece|earpiece/i.test(m.label || ""));
-        const preferred = mics.find((m) => m.deviceId === saved) || earpiece;
-        if (preferred) micSelect.value = preferred.deviceId;
+        if (earpiece) micSelect.value = earpiece.deviceId;
       }
 
-      micSelect.addEventListener("change", () => {
-        if (micSelect.value) localStorage.setItem("audio-recorder-mic", micSelect.value);
-      });
+      function isHeadsetEarpiece(label) {
+        const name = (label || "").toLowerCase().replace(/[^a-z]+/g, " ");
+        return name.includes("headset") && name.includes("earpiece");
+      }
 
       async function openMic() {
         const deviceId = micSelect.value ? { exact: micSelect.value } : undefined;
