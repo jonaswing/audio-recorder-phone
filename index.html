@@ -19,77 +19,228 @@
         --accent: #3d8bfd;
         --danger: #e35d6a;
         --ok: #3ecf8e;
-        --radius: 16px;
+        --radius: 14px;
+        font-family: "Segoe UI", "Cantarell", "Ubuntu", -apple-system, BlinkMacSystemFont, sans-serif;
       }
       * { box-sizing: border-box; }
       html, body {
         margin: 0;
         min-height: 100%;
-        background: radial-gradient(1000px 500px at 20% -10%, #1a2438 0%, var(--bg) 55%);
+        background: radial-gradient(1200px 600px at 20% -10%, #1a2438 0%, var(--bg) 55%);
         color: var(--text);
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       }
       .app {
-        max-width: 440px;
-        margin: 0 auto;
-        padding: 28px 20px 40px;
         display: flex;
         flex-direction: column;
-        gap: 16px;
+        gap: 18px;
+        padding: 22px 20px 40px;
+        max-width: 440px;
+        margin: 0 auto;
+        min-height: 100%;
       }
-      h1 { margin: 0; font-size: 1.6rem; }
-      .tag { color: var(--muted); margin: 6px 0 0; font-size: 0.92rem; }
-      .card {
-        background: color-mix(in srgb, var(--panel) 90%, transparent);
+      header .brand {
+        margin: 0;
+        font-size: 1.55rem;
+        font-weight: 650;
+        letter-spacing: -0.02em;
+      }
+      header .tagline {
+        margin: 6px 0 0;
+        color: var(--muted);
+        font-size: 0.9rem;
+      }
+      .rec-panel {
+        position: relative;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 88px;
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        overflow: hidden;
+      }
+      .rec-panel.recording {
+        border-color: color-mix(in srgb, var(--danger) 55%, var(--border));
+        background: linear-gradient(180deg, #1c1520 0%, var(--panel) 100%);
+      }
+      .rec-idle {
+        margin: 0;
+        color: var(--muted);
+        font-size: 0.95rem;
+      }
+      .rec-panel.recording .rec-idle { display: none; }
+      .rec-badge {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 8px 14px;
+        border-radius: 999px;
+        background: rgba(0, 0, 0, 0.45);
+        font-variant-numeric: tabular-nums;
+        font-size: 1.15rem;
+        font-weight: 600;
+      }
+      .rec-badge.hidden { display: none; }
+      .rec-badge .dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: var(--danger);
+        box-shadow: 0 0 0 0 rgba(227, 93, 106, 0.7);
+        animation: pulse 1.2s infinite;
+      }
+      @keyframes pulse {
+        0% { box-shadow: 0 0 0 0 rgba(227, 93, 106, 0.55); }
+        70% { box-shadow: 0 0 0 8px rgba(227, 93, 106, 0); }
+        100% { box-shadow: 0 0 0 0 rgba(227, 93, 106, 0); }
+      }
+      .controls {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        background: color-mix(in srgb, var(--panel) 88%, transparent);
         border: 1px solid var(--border);
         border-radius: var(--radius);
         padding: 16px;
+      }
+      label {
         display: flex;
         flex-direction: column;
-        gap: 10px;
+        gap: 6px;
+        font-size: 0.82rem;
+        color: var(--muted);
       }
-      label { color: var(--muted); font-size: 0.82rem; display: flex; flex-direction: column; gap: 6px; }
-      input {
+      input, select {
+        appearance: none;
         border: 1px solid var(--border);
         background: #10131a;
         color: var(--text);
         border-radius: 10px;
+        padding: 10px 12px;
+        font-size: 0.92rem;
+      }
+      .volume-panel {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
         padding: 12px;
-        font-size: 1rem;
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        background: #10131a;
+      }
+      .volume-title {
+        margin: 0;
+        font-size: 0.92rem;
+        font-weight: 650;
+        color: var(--text);
+      }
+      .volume-row {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        font-size: 0.82rem;
+        color: var(--muted);
+      }
+      .volume-head span {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+      .volume-row strong {
+        color: var(--text);
+        font-variant-numeric: tabular-nums;
+      }
+      .volume-row input[type="range"] {
+        width: 100%;
+        accent-color: var(--accent);
+        cursor: pointer;
+        padding: 0;
+        border: 0;
+        background: transparent;
+      }
+      .meter {
+        position: relative;
+        height: 10px;
+        border-radius: 4px;
+        background: #0a0c10;
+        border: 1px solid #2a3140;
+        overflow: hidden;
+      }
+      .meter-fill {
+        height: 100%;
+        width: var(--level, 0%);
+        border-radius: 3px;
+        background: linear-gradient(90deg, #2ecc71 0%, #2ecc71 70%, #f1c40f 85%, #e74c3c 100%);
+        transition: width 0.05s linear;
+      }
+      .meter-peak {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        width: 2px;
+        left: var(--peak, 0%);
+        background: #fff;
+        opacity: 0.85;
+        pointer-events: none;
+      }
+      .actions {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+        margin-top: 4px;
       }
       button {
         border: 0;
         border-radius: 12px;
-        padding: 14px;
-        font-size: 1rem;
-        font-weight: 650;
-        color: white;
+        padding: 12px 14px;
+        font-size: 0.95rem;
+        font-weight: 600;
         cursor: pointer;
+        color: white;
       }
-      button:disabled { opacity: 0.45; }
-      .primary { background: linear-gradient(180deg, #4b97ff, var(--accent)); }
-      .danger { background: linear-gradient(180deg, #ef7380, var(--danger)); }
-      .ghost { background: #1a2130; border: 1px solid var(--border); }
-      .status { min-height: 1.3em; color: var(--muted); font-size: 0.88rem; }
+      button:disabled { opacity: 0.45; cursor: not-allowed; }
+      button.primary { background: linear-gradient(180deg, #4b97ff, var(--accent)); }
+      button.danger { background: linear-gradient(180deg, #ef7380, var(--danger)); }
+      button.secondary {
+        width: 100%;
+        margin-top: 2px;
+        background: #1a2130;
+        border: 1px solid var(--border);
+        color: var(--text);
+      }
+      .status {
+        margin: 2px 0 0;
+        min-height: 1.3em;
+        color: var(--muted);
+        font-size: 0.88rem;
+      }
       .status.ok { color: var(--ok); }
       .status.error { color: #ff8f9a; }
-      .rec {
-        min-height: 120px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 2rem;
-        font-variant-numeric: tabular-nums;
+      .hint {
+        margin: -4px 0 0;
+        color: var(--muted);
+        font-size: 0.78rem;
+        line-height: 1.35;
+      }
+      .panel-title {
+        margin: 0;
+        font-size: 0.95rem;
         font-weight: 650;
       }
-      .rec.on { color: var(--danger); }
-      .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-      ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+      ul.phone-list {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
       li.item {
         display: flex;
         flex-direction: column;
         gap: 8px;
-        padding: 10px 0;
+        padding-top: 10px;
         border-top: 1px solid var(--border);
         font-size: 0.85rem;
         color: var(--muted);
@@ -107,45 +258,74 @@
         font-size: 0.85rem;
         width: auto;
         align-self: flex-start;
+        margin: 0;
       }
-      audio {
-        width: 100%;
-        height: 40px;
-      }
+      audio { width: 100%; height: 40px; }
       .hidden { display: none !important; }
     </style>
   </head>
   <body>
     <div class="app">
       <header>
-        <h1>Audio Recorder</h1>
-        <p class="tag">Phone recordings save to your laptop via the cloud mailbox.</p>
+        <p class="brand">Audio Recorder</p>
+        <p class="tagline">Phone mic · syncs to laptop · MP4</p>
       </header>
 
-      <section id="authCard" class="card">
+      <section id="authCard" class="controls">
+        <p class="panel-title">Sign in</p>
         <label>Email <input id="email" type="email" autocomplete="username" /></label>
         <label>Password <input id="password" type="password" autocomplete="current-password" /></label>
-        <div class="row">
+        <div class="actions">
           <button id="signInBtn" class="primary" type="button">Sign in</button>
-          <button id="signUpBtn" class="ghost" type="button">Create account</button>
+          <button id="signUpBtn" class="secondary" type="button">Create account</button>
         </div>
         <p class="status" id="authStatus">Use the same account as the laptop app.</p>
       </section>
 
-      <section id="recCard" class="card hidden">
-        <div class="rec" id="timer">00:00</div>
-        <button id="recBtn" class="primary" type="button">Start recording</button>
-        <p class="status" id="recStatus">Ready.</p>
-        <div id="lastPlay" class="hidden">
-          <p class="tag">Last recording</p>
-          <audio id="lastAudio" controls playsinline></audio>
+      <section id="recPanel" class="rec-panel hidden">
+        <div id="recBadge" class="rec-badge hidden">
+          <span class="dot"></span>
+          <span id="timer">00:00</span>
         </div>
-        <button id="signOutBtn" class="ghost" type="button">Sign out</button>
+        <p class="rec-idle" id="recIdle">Ready to record</p>
       </section>
 
-      <section id="listCard" class="card hidden">
-        <p class="tag">Recent recordings</p>
-        <ul id="list"></ul>
+      <section id="recCard" class="controls hidden">
+        <label>
+          Microphone
+          <select id="micSelect"></select>
+        </label>
+
+        <div class="volume-panel">
+          <p class="volume-title">Volume controls</p>
+          <p class="hint">Adjust mic level before/during recording. Meter moves while you talk.</p>
+          <div class="volume-row">
+            <div class="volume-head">
+              <span>Mic <strong id="micVolLabel">100%</strong></span>
+            </div>
+            <div class="meter" aria-hidden="true">
+              <div id="micMeterFill" class="meter-fill"></div>
+              <div id="micMeterPeak" class="meter-peak"></div>
+            </div>
+            <input id="micVolume" type="range" min="0" max="400" value="100" step="1" />
+          </div>
+        </div>
+
+        <div class="actions">
+          <button id="startBtn" class="primary" type="button">Start recording</button>
+          <button id="stopBtn" class="danger" type="button" disabled>Stop</button>
+        </div>
+        <p class="status" id="recStatus">Ready.</p>
+        <div id="lastPlay" class="hidden">
+          <p class="hint">Last recording</p>
+          <audio id="lastAudio" controls playsinline></audio>
+        </div>
+        <button id="signOutBtn" class="secondary" type="button">Sign out</button>
+      </section>
+
+      <section id="listCard" class="controls hidden">
+        <p class="panel-title">Recent recordings</p>
+        <ul id="list" class="phone-list"></ul>
       </section>
     </div>
 
@@ -159,15 +339,23 @@
 
       const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
       const authCard = document.getElementById("authCard");
+      const recPanel = document.getElementById("recPanel");
       const recCard = document.getElementById("recCard");
       const listCard = document.getElementById("listCard");
       const authStatus = document.getElementById("authStatus");
       const recStatus = document.getElementById("recStatus");
-      const recBtn = document.getElementById("recBtn");
+      const startBtn = document.getElementById("startBtn");
+      const stopBtn = document.getElementById("stopBtn");
       const timerEl = document.getElementById("timer");
+      const recBadge = document.getElementById("recBadge");
       const listEl = document.getElementById("list");
       const lastPlay = document.getElementById("lastPlay");
       const lastAudio = document.getElementById("lastAudio");
+      const micSelect = document.getElementById("micSelect");
+      const micVolume = document.getElementById("micVolume");
+      const micVolLabel = document.getElementById("micVolLabel");
+      const micMeterFill = document.getElementById("micMeterFill");
+      const micMeterPeak = document.getElementById("micMeterPeak");
 
       let mediaRecorder = null;
       let chunks = [];
@@ -175,6 +363,12 @@
       let startedAt = 0;
       let channel = null;
       let objectUrls = new Map();
+      let audioContext = null;
+      let micVolumeGain = null;
+      let micAnalyser = null;
+      let meterRaf = null;
+      let captureStream = null;
+      const micPeakState = { value: 0, hold: 0 };
 
       function setText(el, msg, kind) {
         el.textContent = msg;
@@ -187,12 +381,7 @@
       }
 
       function pickMime() {
-        const types = [
-          "audio/mp4",
-          "audio/webm;codecs=opus",
-          "audio/webm",
-          "video/mp4",
-        ];
+        const types = ["audio/mp4", "audio/webm;codecs=opus", "audio/webm", "video/mp4"];
         return types.find((t) => MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(t)) || "";
       }
 
@@ -202,14 +391,97 @@
         return ".webm";
       }
 
+      function sliderToGain() {
+        return Number(micVolume.value) / 100;
+      }
+
+      function syncVolumeLabel() {
+        micVolLabel.textContent = micVolume.value + "%";
+      }
+
+      micVolume.addEventListener("input", () => {
+        syncVolumeLabel();
+        if (micVolumeGain && audioContext) {
+          micVolumeGain.gain.setTargetAtTime(sliderToGain(), audioContext.currentTime, 0.03);
+        }
+      });
+      syncVolumeLabel();
+
+      function getAnalyserLevel(analyser) {
+        if (!analyser) return 0;
+        const data = new Uint8Array(analyser.fftSize);
+        analyser.getByteTimeDomainData(data);
+        let sum = 0;
+        for (let i = 0; i < data.length; i++) {
+          const v = (data[i] - 128) / 128;
+          sum += v * v;
+        }
+        return Math.min(1, Math.sqrt(sum / data.length) * 3.2);
+      }
+
+      function setMeter(level) {
+        const pct = Math.round(level * 100);
+        if (level >= micPeakState.value) {
+          micPeakState.value = level;
+          micPeakState.hold = 18;
+        } else if (micPeakState.hold > 0) {
+          micPeakState.hold -= 1;
+        } else {
+          micPeakState.value = Math.max(0, micPeakState.value - 0.02);
+        }
+        micMeterFill.style.setProperty("--level", pct + "%");
+        micMeterPeak.style.setProperty("--peak", Math.round(micPeakState.value * 100) + "%");
+        micMeterPeak.style.opacity = micPeakState.value > 0.02 ? "0.9" : "0";
+      }
+
+      function stopMeters() {
+        if (meterRaf) cancelAnimationFrame(meterRaf);
+        meterRaf = null;
+        micMeterFill.style.setProperty("--level", "0%");
+        micMeterPeak.style.setProperty("--peak", "0%");
+        micMeterPeak.style.opacity = "0";
+        micPeakState.value = 0;
+      }
+
+      function startMeters() {
+        stopMeters();
+        const tick = () => {
+          setMeter(getAnalyserLevel(micAnalyser));
+          meterRaf = requestAnimationFrame(tick);
+        };
+        meterRaf = requestAnimationFrame(tick);
+      }
+
+      async function loadMics() {
+        try {
+          const temp = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+          temp.getTracks().forEach((t) => t.stop());
+        } catch {
+          // permission may still allow enumerate later
+        }
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const mics = devices.filter((d) => d.kind === "audioinput");
+        micSelect.innerHTML = "";
+        for (const mic of mics) {
+          const opt = document.createElement("option");
+          opt.value = mic.deviceId;
+          opt.textContent = mic.label || "Microphone";
+          micSelect.appendChild(opt);
+        }
+        if (!mics.length) {
+          const opt = document.createElement("option");
+          opt.value = "";
+          opt.textContent = "Default microphone";
+          micSelect.appendChild(opt);
+        }
+      }
+
       function openDb() {
         return new Promise((resolve, reject) => {
           const req = indexedDB.open(DB_NAME, 1);
           req.onupgradeneeded = () => {
             const db = req.result;
-            if (!db.objectStoreNames.contains(STORE)) {
-              db.createObjectStore(STORE, { keyPath: "id" });
-            }
+            if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE, { keyPath: "id" });
           };
           req.onsuccess = () => resolve(req.result);
           req.onerror = () => reject(req.error);
@@ -259,18 +531,41 @@
       }
 
       function showLastPlayer(blob) {
-        const url = blobUrlFor("last", blob);
-        lastAudio.src = url;
+        lastAudio.src = blobUrlFor("last", blob);
         lastPlay.classList.remove("hidden");
+      }
+
+      function cleanupCapture() {
+        stopMeters();
+        if (timer) clearInterval(timer);
+        timer = null;
+        if (captureStream) {
+          captureStream.getTracks().forEach((t) => t.stop());
+          captureStream = null;
+        }
+        if (audioContext) {
+          audioContext.close().catch(() => {});
+          audioContext = null;
+        }
+        micVolumeGain = null;
+        micAnalyser = null;
+        mediaRecorder = null;
+        recPanel.classList.remove("recording");
+        recBadge.classList.add("hidden");
+        startBtn.disabled = false;
+        stopBtn.disabled = true;
+        micSelect.disabled = false;
       }
 
       async function refreshAuth() {
         const { data } = await supabase.auth.getSession();
         const signedIn = !!data.session;
         authCard.classList.toggle("hidden", signedIn);
+        recPanel.classList.toggle("hidden", !signedIn);
         recCard.classList.toggle("hidden", !signedIn);
         listCard.classList.toggle("hidden", !signedIn);
         if (signedIn) {
+          await loadMics();
           await loadList();
           watchList();
         } else if (channel) {
@@ -297,15 +592,14 @@
           }
           const { data, error } = await supabase.storage.from("recordings").download(row.storage_path);
           if (error) throw error;
-          const blob = data;
           await saveClip({
             id: row.id,
-            blob,
+            blob: data,
             fileName: row.file_name,
             createdAt: row.created_at,
-            contentType: row.content_type || blob.type,
+            contentType: row.content_type || data.type,
           });
-          const url = blobUrlFor(row.id, blob);
+          const url = blobUrlFor(row.id, data);
           const audio = document.getElementById("audio-" + row.id);
           if (audio) {
             audio.src = url;
@@ -331,7 +625,7 @@
         const localById = new Map(localClips.map((c) => [c.id, c]));
         listEl.innerHTML = "";
         const rows = data || [];
-        if (!rows.length && !localClips.length) {
+        if (!rows.length) {
           const li = document.createElement("li");
           li.className = "item";
           li.textContent = "No recordings yet.";
@@ -357,7 +651,7 @@
           li.appendChild(audio);
           if (canPlayLocal || canPlayCloud) {
             const btn = document.createElement("button");
-            btn.className = "ghost";
+            btn.className = "secondary";
             btn.type = "button";
             btn.textContent = "Play";
             btn.onclick = () => playRecording(row);
@@ -407,10 +701,7 @@
         try {
           const res = await fetch(SUPABASE_URL + "/functions/v1/signup", {
             method: "POST",
-            headers: {
-              "content-type": "application/json",
-              apikey: SUPABASE_ANON,
-            },
+            headers: { "content-type": "application/json", apikey: SUPABASE_ANON },
             body: JSON.stringify({ email, password }),
           });
           const payload = await res.json().catch(() => ({}));
@@ -430,41 +721,67 @@
         refreshAuth();
       };
 
-      recBtn.onclick = async () => {
-        if (mediaRecorder) {
-          mediaRecorder.stop();
-          return;
-        }
+      stopBtn.onclick = () => {
+        if (mediaRecorder && mediaRecorder.state !== "inactive") mediaRecorder.stop();
+      };
+
+      startBtn.onclick = async () => {
+        if (mediaRecorder) return;
         try {
-          const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+          startBtn.disabled = true;
+          setText(recStatus, "Starting…");
+          captureStream = await navigator.mediaDevices.getUserMedia({
+            audio: {
+              deviceId: micSelect.value ? { exact: micSelect.value } : undefined,
+              echoCancellation: false,
+              noiseSuppression: false,
+              autoGainControl: false,
+            },
+            video: false,
+          });
+
+          audioContext = new AudioContext({ sampleRate: 48000 });
+          await audioContext.resume();
+          const source = audioContext.createMediaStreamSource(captureStream);
+          micVolumeGain = audioContext.createGain();
+          micVolumeGain.gain.value = sliderToGain();
+          source.connect(micVolumeGain);
+          micAnalyser = audioContext.createAnalyser();
+          micAnalyser.fftSize = 1024;
+          micAnalyser.smoothingTimeConstant = 0.5;
+          micVolumeGain.connect(micAnalyser);
+          const dest = audioContext.createMediaStreamDestination();
+          micVolumeGain.connect(dest);
+
           chunks = [];
           const mime = pickMime();
-          mediaRecorder = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
+          mediaRecorder = new MediaRecorder(dest.stream, mime ? { mimeType: mime } : undefined);
           mediaRecorder.ondataavailable = (e) => {
             if (e.data && e.data.size) chunks.push(e.data);
           };
           mediaRecorder.onstop = async () => {
-            stream.getTracks().forEach((t) => t.stop());
-            clearInterval(timer);
-            recBtn.textContent = "Start recording";
-            recBtn.className = "primary";
-            timerEl.classList.remove("on");
-            const blob = new Blob(chunks, { type: mediaRecorder.mimeType || mime || "audio/webm" });
-            mediaRecorder = null;
+            const blob = new Blob(chunks, {
+              type: mediaRecorder?.mimeType || mime || "audio/webm",
+            });
+            cleanupCapture();
             showLastPlayer(blob);
             await uploadBlob(blob);
           };
+
           mediaRecorder.start(1000);
           startedAt = Date.now();
           timerEl.textContent = "00:00";
-          timerEl.classList.add("on");
-          recBtn.textContent = "Stop";
-          recBtn.className = "danger";
+          recBadge.classList.remove("hidden");
+          recPanel.classList.add("recording");
+          stopBtn.disabled = false;
+          micSelect.disabled = true;
+          startMeters();
           timer = setInterval(() => {
             timerEl.textContent = fmt(Date.now() - startedAt);
           }, 250);
-          setText(recStatus, "Recording…", "ok");
+          setText(recStatus, "Recording… watch the mic meter.", "ok");
         } catch (err) {
+          cleanupCapture();
           setText(recStatus, err.message, "error");
         }
       };
@@ -474,14 +791,15 @@
           setText(recStatus, "Recording was too small.", "error");
           return;
         }
-        recBtn.disabled = true;
+        startBtn.disabled = true;
         setText(recStatus, "Uploading…");
         try {
           const { data: userData, error: userErr } = await supabase.auth.getUser();
           if (userErr || !userData.user) throw new Error("Not signed in");
           const mime = blob.type || "audio/webm";
           const id = crypto.randomUUID();
-          const fileName = "phone-" + new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19) + extFor(mime);
+          const fileName =
+            "phone-" + new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19) + extFor(mime);
           const storagePath = userData.user.id + "/" + id + extFor(mime);
           const { error: upErr } = await supabase.storage.from("recordings").upload(storagePath, blob, {
             contentType: mime,
@@ -516,7 +834,7 @@
         } catch (err) {
           setText(recStatus, err.message || String(err), "error");
         } finally {
-          recBtn.disabled = false;
+          startBtn.disabled = false;
         }
       }
 
