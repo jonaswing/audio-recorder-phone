@@ -531,10 +531,11 @@
             echoCancellation: false,
             noiseSuppression: false,
             autoGainControl: false,
-            channelCount: 2,
-            sampleRate: 48000,
+            channelCount: { ideal: 2 },
+            sampleRate: { ideal: 48000 },
             suppressLocalAudioPlayback: false,
           },
+          systemAudio: "include",
         });
         const audio = displayStream.getAudioTracks()[0];
         if (!audio) {
@@ -542,23 +543,6 @@
           throw new Error("No device audio was shared. Turn on system audio for the whole screen.");
         }
         try { audio.contentHint = "music"; } catch { /* ignore */ }
-        if (audio.applyConstraints) {
-          try {
-            await audio.applyConstraints({
-              echoCancellation: false,
-              noiseSuppression: false,
-              autoGainControl: false,
-              channelCount: 2,
-              sampleRate: 48000,
-            });
-          } catch { /* ignore */ }
-        }
-        const video = document.createElement("video");
-        video.muted = true;
-        video.playsInline = true;
-        video.srcObject = displayStream;
-        video.play().catch(() => {});
-        displayStream._keepAlive = video;
         return displayStream;
       }
 
@@ -603,7 +587,7 @@
             codec: "aac",
             numberOfChannels: 2,
             sampleRate: 48000,
-            quality: new mediabunny.Quality({ bitrate: 384000 }),
+            quality: new mediabunny.Quality({ bitrate: 384000, bitrateMode: "constant" }),
           },
         });
         await conversion.execute();
@@ -690,13 +674,12 @@
             }
           }
 
-          audioContext = new AudioContext({ sampleRate: 48000, latencyHint: "playback" });
+          audioContext = new AudioContext({ latencyHint: "playback" });
           await audioContext.resume();
-          const merger = audioContext.createChannelMerger(2);
           const dest = audioContext.createMediaStreamDestination();
           dest.channelCount = 2;
           dest.channelCountMode = "explicit";
-          dest.channelInterpretation = "speakers";
+          dest.channelInterpretation = "discrete";
 
           const micSource = audioContext.createMediaStreamSource(micStream);
           micSource.channelCount = 1;
@@ -707,30 +690,24 @@
           micAnalyser = audioContext.createAnalyser();
           micAnalyser.fftSize = 2048;
           micVolumeGain.connect(micAnalyser);
-          micVolumeGain.connect(merger, 0, 0);
-          micVolumeGain.connect(merger, 0, 1);
+          micVolumeGain.connect(dest);
 
           if (systemStream) {
             const deskSource = audioContext.createMediaStreamSource(systemStream);
             deskSource.channelCount = 2;
             deskSource.channelCountMode = "explicit";
-            deskSource.channelInterpretation = "speakers";
+            deskSource.channelInterpretation = "discrete";
             desktopVolumeGain = audioContext.createGain();
             desktopVolumeGain.channelCount = 2;
             desktopVolumeGain.channelCountMode = "explicit";
-            desktopVolumeGain.channelInterpretation = "speakers";
+            desktopVolumeGain.channelInterpretation = "discrete";
             desktopVolumeGain.gain.value = sliderToGain(desktopVolume);
             deskSource.connect(desktopVolumeGain);
             desktopAnalyser = audioContext.createAnalyser();
             desktopAnalyser.fftSize = 2048;
             desktopVolumeGain.connect(desktopAnalyser);
-            const splitter = audioContext.createChannelSplitter(2);
-            desktopVolumeGain.connect(splitter);
-            splitter.connect(merger, 0, 0);
-            splitter.connect(merger, 1, 1);
+            desktopVolumeGain.connect(dest);
           }
-
-          merger.connect(dest);
 
           chunks = [];
           const mime = pickMime();
