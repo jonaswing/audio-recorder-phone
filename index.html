@@ -151,22 +151,12 @@
         padding: 10px 12px;
         font-size: 0.92rem;
       }
-      .level {
-        position: relative;
-        height: 14px;
-        border-radius: 7px;
-        background: #0a0c10;
-        border: 1px solid #2a3140;
-        overflow: hidden;
+      .wave {
+        align-self: stretch;
+        width: 100%;
+        height: 84px;
+        display: block;
       }
-      .level-fill {
-        height: 100%;
-        width: var(--level, 0%);
-        border-radius: 6px;
-        background: linear-gradient(90deg, #2ecc71 0%, #2ecc71 62%, #f1c40f 82%, #e74c3c 100%);
-        transition: width 0.05s linear;
-      }
-      .record-wrap .level { align-self: stretch; margin-top: 4px; }
       .status {
         margin: 0;
         min-height: 1.3em;
@@ -253,11 +243,9 @@
           </svg>
         </button>
         <p id="timer" class="record-time"></p>
+        <canvas id="wave" class="wave" aria-label="Microphone signal"></canvas>
         <p id="recordHint" class="record-hint">Tap to record</p>
         <p class="status" id="recStatus">Ready.</p>
-        <div class="level" id="micMeter" role="meter" aria-label="Microphone level" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
-          <div id="micMeterFill" class="level-fill"></div>
-        </div>
       </div>
 
       <section id="listCard" class="controls">
@@ -270,8 +258,8 @@
       const micSelect = document.getElementById("micSelect");
       const moreBtn = document.getElementById("moreBtn");
       const micMenu = document.getElementById("micMenu");
-      const micMeter = document.getElementById("micMeter");
-      const micMeterFill = document.getElementById("micMeterFill");
+      const waveCanvas = document.getElementById("wave");
+      const waveCtx = waveCanvas.getContext("2d");
       const recStatus = document.getElementById("recStatus");
       const recordBtn = document.getElementById("recordBtn");
       const recordHint = document.getElementById("recordHint");
@@ -287,7 +275,6 @@
       let monitorContext = null;
       let micAnalyser = null;
       let meterRaf = null;
-      let shownLevel = 0;
       let monitorToken = 0;
       let captureStreams = [];
       const recordings = [];
@@ -396,29 +383,56 @@
         throw lastErr || new Error("Could not open the microphone");
       }
 
-      function micLevel() {
-        if (!micAnalyser) return 0;
-        const data = new Uint8Array(micAnalyser.fftSize);
-        micAnalyser.getByteTimeDomainData(data);
-        let sum = 0;
-        for (let i = 0; i < data.length; i++) {
-          const v = (data[i] - 128) / 128;
-          sum += v * v;
+      function drawWave() {
+        const dpr = window.devicePixelRatio || 1;
+        const width = waveCanvas.clientWidth || 300;
+        const height = waveCanvas.clientHeight || 84;
+        const pixelsW = Math.floor(width * dpr);
+        const pixelsH = Math.floor(height * dpr);
+        if (waveCanvas.width !== pixelsW || waveCanvas.height !== pixelsH) {
+          waveCanvas.width = pixelsW;
+          waveCanvas.height = pixelsH;
         }
-        return Math.min(1, Math.sqrt(sum / data.length) * 4.5);
+        waveCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        waveCtx.clearRect(0, 0, width, height);
+        const mid = height / 2;
+        const samples = micAnalyser ? micAnalyser.fftSize : 0;
+        const data = samples ? new Uint8Array(samples) : null;
+        if (micAnalyser) micAnalyser.getByteTimeDomainData(data);
+        waveCtx.beginPath();
+        waveCtx.moveTo(0, mid);
+        const points = Math.max(2, Math.floor(width));
+        for (let x = 0; x < points; x++) {
+          let v = 0;
+          if (data) {
+            const i = Math.min(samples - 1, Math.floor((x / (points - 1)) * (samples - 1)));
+            v = (data[i] - 128) / 128;
+          }
+          waveCtx.lineTo(x, mid - v * height * 0.46);
+        }
+        for (let x = points - 1; x >= 0; x--) {
+          let v = 0;
+          if (data) {
+            const i = Math.min(samples - 1, Math.floor((x / (points - 1)) * (samples - 1)));
+            v = (data[i] - 128) / 128;
+          }
+          waveCtx.lineTo(x, mid + v * height * 0.46);
+        }
+        waveCtx.closePath();
+        waveCtx.fillStyle = "rgba(62, 207, 142, 0.9)";
+        waveCtx.fill();
+        waveCtx.beginPath();
+        waveCtx.moveTo(0, mid);
+        waveCtx.lineTo(width, mid);
+        waveCtx.strokeStyle = "rgba(232, 236, 244, 0.18)";
+        waveCtx.lineWidth = 1;
+        waveCtx.stroke();
+        meterRaf = requestAnimationFrame(drawWave);
       }
 
-      function startMeterLoop() {
+      function startWaveLoop() {
         if (meterRaf) return;
-        const tick = () => {
-          const target = micLevel();
-          shownLevel = target > shownLevel ? shownLevel * 0.3 + target * 0.7 : shownLevel * 0.82;
-          const pct = Math.max(0, Math.min(100, Math.round(shownLevel * 100)));
-          micMeterFill.style.setProperty("--level", pct + "%");
-          micMeter.setAttribute("aria-valuenow", String(pct));
-          meterRaf = requestAnimationFrame(tick);
-        };
-        meterRaf = requestAnimationFrame(tick);
+        meterRaf = requestAnimationFrame(drawWave);
       }
 
       async function startMonitor() {
@@ -443,9 +457,9 @@
         const source = monitorContext.createMediaStreamSource(stream);
         micAnalyser = monitorContext.createAnalyser();
         micAnalyser.fftSize = 2048;
-        micAnalyser.smoothingTimeConstant = 0.4;
+        micAnalyser.smoothingTimeConstant = 0.15;
         source.connect(micAnalyser);
-        startMeterLoop();
+        startWaveLoop();
       }
 
       moreBtn.addEventListener("click", (event) => {
@@ -717,6 +731,7 @@
         }
       };
 
+      startWaveLoop();
       renderList();
       loadMics().catch((err) => setText(err.message, "error"));
     </script>
