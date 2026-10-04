@@ -108,6 +108,21 @@
         padding: 10px 12px;
         font-size: 0.92rem;
       }
+      .level {
+        position: relative;
+        height: 14px;
+        border-radius: 7px;
+        background: #0a0c10;
+        border: 1px solid #2a3140;
+        overflow: hidden;
+      }
+      .level-fill {
+        height: 100%;
+        width: var(--level, 0%);
+        border-radius: 6px;
+        background: linear-gradient(90deg, #2ecc71 0%, #2ecc71 62%, #f1c40f 82%, #e74c3c 100%);
+        transition: width 0.05s linear;
+      }
       .actions {
         display: grid;
         grid-template-columns: 1fr 1fr;
@@ -207,6 +222,9 @@
           Microphone
           <select id="micSelect"></select>
         </label>
+        <div class="level" id="micMeter" role="meter" aria-label="Microphone level" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+          <div id="micMeterFill" class="level-fill"></div>
+        </div>
 
         <div class="actions">
           <button id="startBtn" class="primary" type="button">Start recording</button>
@@ -223,6 +241,8 @@
 
     <script type="module">
       const micSelect = document.getElementById("micSelect");
+      const micMeter = document.getElementById("micMeter");
+      const micMeterFill = document.getElementById("micMeterFill");
       const recPanel = document.getElementById("recPanel");
       const recStatus = document.getElementById("recStatus");
       const startBtn = document.getElementById("startBtn");
@@ -235,6 +255,12 @@
       let timer = null;
       let startedAt = 0;
       let audioContext = null;
+      let monitorStream = null;
+      let monitorContext = null;
+      let micAnalyser = null;
+      let meterRaf = null;
+      let shownLevel = 0;
+      let monitorToken = 0;
       let captureStreams = [];
       const recordings = [];
       const canDisplayMedia = !!(navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia);
@@ -300,6 +326,7 @@
           micSelect.appendChild(opt);
         }
         if (earpiece) micSelect.value = earpiece.deviceId;
+        await startMonitor();
       }
 
       function isHeadsetEarpiece(label) {
@@ -340,6 +367,66 @@
         }
         throw lastErr || new Error("Could not open the microphone");
       }
+
+      function micLevel() {
+        if (!micAnalyser) return 0;
+        const data = new Uint8Array(micAnalyser.fftSize);
+        micAnalyser.getByteTimeDomainData(data);
+        let sum = 0;
+        for (let i = 0; i < data.length; i++) {
+          const v = (data[i] - 128) / 128;
+          sum += v * v;
+        }
+        return Math.min(1, Math.sqrt(sum / data.length) * 4.5);
+      }
+
+      function startMeterLoop() {
+        if (meterRaf) return;
+        const tick = () => {
+          const target = micLevel();
+          shownLevel = target > shownLevel ? shownLevel * 0.3 + target * 0.7 : shownLevel * 0.82;
+          const pct = Math.max(0, Math.min(100, Math.round(shownLevel * 100)));
+          micMeterFill.style.setProperty("--level", pct + "%");
+          micMeter.setAttribute("aria-valuenow", String(pct));
+          meterRaf = requestAnimationFrame(tick);
+        };
+        meterRaf = requestAnimationFrame(tick);
+      }
+
+      async function startMonitor() {
+        const token = ++monitorToken;
+        if (monitorStream) {
+          monitorStream.getTracks().forEach((t) => t.stop());
+          monitorStream = null;
+        }
+        if (monitorContext) {
+          monitorContext.close().catch(() => {});
+          monitorContext = null;
+        }
+        micAnalyser = null;
+        const stream = await openMic();
+        if (token !== monitorToken) {
+          stream.getTracks().forEach((t) => t.stop());
+          return;
+        }
+        monitorStream = stream;
+        monitorContext = new AudioContext();
+        await monitorContext.resume();
+        const source = monitorContext.createMediaStreamSource(stream);
+        micAnalyser = monitorContext.createAnalyser();
+        micAnalyser.fftSize = 2048;
+        micAnalyser.smoothingTimeConstant = 0.4;
+        source.connect(micAnalyser);
+        startMeterLoop();
+      }
+
+      micSelect.addEventListener("change", () => {
+        if (mediaRecorder) return;
+        startMonitor().catch((err) => setText(err.message, "error"));
+      });
+      document.addEventListener("pointerdown", () => {
+        if (monitorContext && monitorContext.state === "suspended") monitorContext.resume();
+      });
 
       async function getSystemAudioStream() {
         const displayStream = await navigator.mediaDevices.getDisplayMedia({
@@ -497,8 +584,11 @@
         try {
           startBtn.disabled = true;
           setText("Starting…");
-          const micStream = await openMic();
-          captureStreams.push(micStream);
+          if (!monitorStream || monitorStream.getAudioTracks().every((t) => t.readyState !== "live")) {
+            await startMonitor();
+          }
+          const micStream = monitorStream;
+          if (!micStream) throw new Error("Could not open the microphone");
 
           let systemStream = null;
           if (!isPhone && canDisplayMedia) {
