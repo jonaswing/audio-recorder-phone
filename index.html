@@ -274,12 +274,19 @@
         align-items: center;
       }
       li.item strong { color: var(--text); font-weight: 600; }
-      li.item button {
+      li.item button,
+      li.item a.save {
         padding: 8px 12px;
         font-size: 0.85rem;
         width: auto;
         align-self: flex-start;
         margin: 0;
+        border-radius: 12px;
+        font-weight: 600;
+        text-decoration: none;
+        background: #1a2130;
+        border: 1px solid var(--border);
+        color: var(--text);
       }
       audio { width: 100%; height: 40px; }
       .hidden { display: none !important; }
@@ -640,18 +647,6 @@
         throw new Error("This browser could not write an MP4.");
       }
 
-      async function saveFile(blob, filename) {
-        const file = new File([blob], filename, { type: "audio/mp4" });
-        if (navigator.canShare && navigator.canShare({ files: [file] })) {
-          await navigator.share({ files: [file], title: filename });
-          return;
-        }
-        const a = document.createElement("a");
-        a.href = URL.createObjectURL(blob);
-        a.download = filename;
-        a.click();
-      }
-
       function renderList() {
         listEl.innerHTML = "";
         if (!recordings.length) {
@@ -671,20 +666,13 @@
           audio.controls = true;
           audio.setAttribute("playsinline", "");
           audio.src = item.url;
-          const btn = document.createElement("button");
-          btn.type = "button";
-          btn.className = "secondary";
-          btn.textContent = "Save MP4";
-          btn.onclick = async () => {
-            try {
-              await saveFile(item.blob, item.name);
-              setText("Saved " + item.name, "ok");
-            } catch (err) {
-              if (err && err.name === "AbortError") return;
-              setText(err.message || String(err), "error");
-            }
-          };
-          li.append(meta, audio, btn);
+          const save = document.createElement("a");
+          save.className = "save";
+          save.href = item.url;
+          save.download = item.name;
+          save.textContent = "Save MP4";
+          save.addEventListener("click", () => setText("Saving " + item.name + "…", "ok"));
+          li.append(meta, audio, save);
           listEl.appendChild(li);
         }
       }
