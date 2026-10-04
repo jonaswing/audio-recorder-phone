@@ -44,44 +44,59 @@
         font-weight: 650;
         letter-spacing: -0.02em;
       }
-      .rec-panel {
-        position: relative;
+      .record-wrap {
         display: flex;
+        flex-direction: column;
         align-items: center;
-        justify-content: center;
-        min-height: 88px;
-        background: var(--panel);
-        border: 1px solid var(--border);
-        border-radius: var(--radius);
-        overflow: hidden;
+        gap: 14px;
+        padding: 22px 0 6px;
       }
-      .rec-panel.recording {
-        border-color: color-mix(in srgb, var(--danger) 55%, var(--border));
-        background: linear-gradient(180deg, #1c1520 0%, var(--panel) 100%);
-      }
-      .rec-badge {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        padding: 8px 14px;
-        border-radius: 999px;
-        background: rgba(0, 0, 0, 0.45);
+      .record-time {
+        margin: 0;
+        min-height: 1.4em;
         font-variant-numeric: tabular-nums;
-        font-size: 1.15rem;
-        font-weight: 600;
+        font-size: 1.35rem;
+        font-weight: 650;
+        letter-spacing: 0.04em;
       }
-      .rec-badge .dot {
-        width: 10px;
-        height: 10px;
+      .record-btn {
+        width: 118px;
+        height: 118px;
+        border: 0;
         border-radius: 50%;
-        background: var(--danger);
-        box-shadow: 0 0 0 0 rgba(227, 93, 106, 0.7);
-        animation: pulse 1.2s infinite;
+        padding: 0;
+        display: grid;
+        place-items: center;
+        color: white;
+        background: radial-gradient(circle at 35% 28%, #ff8b94, #e03545 58%, #b42332);
+        box-shadow: 0 12px 32px rgba(224, 53, 69, 0.38), inset 0 1px 0 rgba(255, 255, 255, 0.28);
+        cursor: pointer;
+        position: relative;
       }
-      @keyframes pulse {
-        0% { box-shadow: 0 0 0 0 rgba(227, 93, 106, 0.55); }
-        70% { box-shadow: 0 0 0 8px rgba(227, 93, 106, 0); }
-        100% { box-shadow: 0 0 0 0 rgba(227, 93, 106, 0); }
+      .record-btn svg {
+        width: 52px;
+        height: 52px;
+      }
+      .record-btn .icon-stop { display: none; }
+      .record-btn.recording .icon-mic { display: none; }
+      .record-btn.recording .icon-stop { display: block; }
+      .record-btn.recording::before {
+        content: "";
+        position: absolute;
+        inset: -12px;
+        border-radius: 50%;
+        border: 2px solid rgba(227, 93, 106, 0.55);
+        animation: record-ring 1.5s ease-out infinite;
+      }
+      @keyframes record-ring {
+        0% { transform: scale(0.94); opacity: 0.85; }
+        100% { transform: scale(1.14); opacity: 0; }
+      }
+      .record-btn:disabled { opacity: 0.55; cursor: wait; }
+      .record-hint {
+        margin: 0;
+        color: var(--muted);
+        font-size: 0.92rem;
       }
       .controls {
         display: flex;
@@ -123,34 +138,10 @@
         background: linear-gradient(90deg, #2ecc71 0%, #2ecc71 62%, #f1c40f 82%, #e74c3c 100%);
         transition: width 0.05s linear;
       }
-      .actions {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 10px;
-        margin-top: 4px;
-      }
-      button {
-        border: 0;
-        border-radius: 12px;
-        padding: 12px 14px;
-        font-size: 0.95rem;
-        font-weight: 600;
-        cursor: pointer;
-        color: white;
-      }
-      button:disabled { opacity: 0.45; cursor: not-allowed; }
-      button.primary { background: linear-gradient(180deg, #4b97ff, var(--accent)); }
-      button.danger { background: linear-gradient(180deg, #ef7380, var(--danger)); }
-      button.secondary {
-        width: 100%;
-        margin-top: 2px;
-        background: #1a2130;
-        border: 1px solid var(--border);
-        color: var(--text);
-      }
       .status {
-        margin: 2px 0 0;
+        margin: 0;
         min-height: 1.3em;
+        text-align: center;
         color: var(--muted);
         font-size: 0.88rem;
       }
@@ -210,13 +201,6 @@
         <p class="brand">Audio Recorder</p>
       </header>
 
-      <section id="recPanel" class="rec-panel hidden">
-        <div id="recBadge" class="rec-badge">
-          <span class="dot"></span>
-          <span id="timer">00:00</span>
-        </div>
-      </section>
-
       <section id="recCard" class="controls">
         <label>
           Microphone
@@ -226,9 +210,20 @@
           <div id="micMeterFill" class="level-fill"></div>
         </div>
 
-        <div class="actions">
-          <button id="startBtn" class="primary" type="button">Start recording</button>
-          <button id="stopBtn" class="danger" type="button" disabled>Stop</button>
+        <div class="record-wrap">
+          <p id="timer" class="record-time"></p>
+          <button id="recordBtn" class="record-btn" type="button" aria-label="Start recording">
+            <svg class="icon-mic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <rect x="9" y="3" width="6" height="11" rx="3"></rect>
+              <path d="M6 11a6 6 0 0 0 12 0"></path>
+              <path d="M12 17v4"></path>
+              <path d="M8 21h8"></path>
+            </svg>
+            <svg class="icon-stop" viewBox="0 0 24 24" aria-hidden="true">
+              <rect x="7" y="7" width="10" height="10" rx="2" fill="currentColor"></rect>
+            </svg>
+          </button>
+          <p id="recordHint" class="record-hint">Tap to record</p>
         </div>
         <p class="status" id="recStatus">Ready.</p>
       </section>
@@ -243,10 +238,9 @@
       const micSelect = document.getElementById("micSelect");
       const micMeter = document.getElementById("micMeter");
       const micMeterFill = document.getElementById("micMeterFill");
-      const recPanel = document.getElementById("recPanel");
       const recStatus = document.getElementById("recStatus");
-      const startBtn = document.getElementById("startBtn");
-      const stopBtn = document.getElementById("stopBtn");
+      const recordBtn = document.getElementById("recordBtn");
+      const recordHint = document.getElementById("recordHint");
       const timerEl = document.getElementById("timer");
       const listEl = document.getElementById("list");
 
@@ -460,11 +454,16 @@
           audioContext = null;
         }
         mediaRecorder = null;
-        recPanel.classList.remove("recording");
-        recPanel.classList.add("hidden");
-        startBtn.disabled = false;
-        stopBtn.disabled = true;
+        setRecordMode(false);
         micSelect.disabled = false;
+      }
+
+      function setRecordMode(on) {
+        recordBtn.classList.toggle("recording", on);
+        recordBtn.disabled = false;
+        recordBtn.setAttribute("aria-label", on ? "Stop recording" : "Start recording");
+        recordHint.textContent = on ? "Tap to stop" : "Tap to record";
+        if (!on) timerEl.textContent = "";
       }
 
       async function toMp4(blob) {
@@ -575,14 +574,14 @@
         }
       }
 
-      stopBtn.onclick = () => {
-        if (mediaRecorder && mediaRecorder.state !== "inactive") mediaRecorder.stop();
-      };
-
-      startBtn.onclick = async () => {
+      recordBtn.onclick = async () => {
+        if (mediaRecorder && mediaRecorder.state !== "inactive") {
+          mediaRecorder.stop();
+          return;
+        }
         if (mediaRecorder) return;
         try {
-          startBtn.disabled = true;
+          recordBtn.disabled = true;
           setText("Starting…");
           if (!monitorStream || monitorStream.getAudioTracks().every((t) => t.readyState !== "live")) {
             await startMonitor();
@@ -657,9 +656,7 @@
           else mediaRecorder.start(1000);
           startedAt = Date.now();
           timerEl.textContent = "00:00";
-          recPanel.classList.remove("hidden");
-          recPanel.classList.add("recording");
-          stopBtn.disabled = false;
+          setRecordMode(true);
           micSelect.disabled = true;
           timer = setInterval(() => {
             timerEl.textContent = fmt(Date.now() - startedAt);
