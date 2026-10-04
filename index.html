@@ -626,7 +626,14 @@
 
       async function loadMics() {
         try {
-          const temp = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+          const temp = await navigator.mediaDevices.getUserMedia({
+            audio: {
+              echoCancellation: false,
+              noiseSuppression: false,
+              autoGainControl: false,
+            },
+            video: false,
+          });
           temp.getTracks().forEach((t) => t.stop());
         } catch {
           // list whatever is already permitted
@@ -638,7 +645,8 @@
         lastMicKey = key;
         const bluetooth = mics.find((m) => isBluetoothMic(m.label));
         const earpiece = mics.find((m) => isHeadsetEarpiece(m.label));
-        const preferred = bluetooth || earpiece;
+        const builtin = earpiece || mics.find((m) => !isBluetoothMic(m.label));
+        const preferred = builtin || bluetooth;
         const ordered = preferred ? [preferred, ...mics.filter((m) => m !== preferred)] : mics;
         const previous = micSelect.value;
         micSelect.innerHTML = "";
