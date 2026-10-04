@@ -215,8 +215,13 @@
         color: var(--muted);
         font-size: 0.78rem;
       }
-      .clip-save {
+      .clip-actions {
+        display: flex;
         flex-shrink: 0;
+        gap: 8px;
+      }
+      .clip-save,
+      .clip-delete {
         padding: 8px 12px;
         border-radius: 999px;
         border: 1px solid var(--border);
@@ -225,6 +230,12 @@
         text-decoration: none;
         font-size: 0.8rem;
         font-weight: 650;
+        cursor: pointer;
+      }
+      .clip-delete {
+        background: transparent;
+        border-color: color-mix(in srgb, var(--danger) 55%, var(--border));
+        color: #ff8f9a;
       }
       .clip-player {
         display: grid;
@@ -744,7 +755,22 @@
           save.download = item.name;
           save.textContent = "Download";
           save.addEventListener("click", () => setText("Downloading " + item.name + "…", "ok"));
-          head.append(titles, save);
+          const del = document.createElement("button");
+          del.type = "button";
+          del.className = "clip-delete";
+          del.textContent = "Delete";
+          del.addEventListener("click", () => {
+            audio.pause();
+            URL.revokeObjectURL(item.url);
+            URL.revokeObjectURL(save.href);
+            const index = recordings.indexOf(item);
+            if (index >= 0) recordings.splice(index, 1);
+            renderList();
+          });
+          const actions = document.createElement("div");
+          actions.className = "clip-actions";
+          actions.append(save, del);
+          head.append(titles, actions);
 
           const audio = document.createElement("audio");
           audio.preload = "metadata";
